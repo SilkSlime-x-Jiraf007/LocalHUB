@@ -7,13 +7,13 @@ from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt, ExpiredSignatureError
 from datetime import timedelta, datetime
-
+import os
 from app import models
 from app.utils import response
 from app.utils import get_user_agent
 
 # openssl rand -hex 32
-SECRET_KEY = "5380bad56b2ebc607b00822c9d5dd36119973f69c48ba6b9511e38c948a6cb62"
+SECRET_KEY = os.environ.get("SECRET")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_MINUTES = 43200
