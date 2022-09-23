@@ -1,0 +1,8 @@
+CREATE TABLE files (
+    hash CHARACTER VARYING(32) PRIMARY KEY,
+    path CHARACTER VARYING NOT NULL UNIQUE,
+    owner CHARACTER VARYING REFERENCES users (username) ON DELETE SET NULL ON UPDATE CASCADE,
+    filename CHARACTER VARYING NOT NULL,
+    description CHARACTER VARYING,
+    create_time timestamp with time zone NOT NULL
+);

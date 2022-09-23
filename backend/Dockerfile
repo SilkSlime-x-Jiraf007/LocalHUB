@@ -1,7 +1,8 @@
-FROM php:8.1.0RC5-apache-buster
-
-RUN apt-get update
-RUN apt-get install -y libpq-dev
-RUN docker-php-ext-install pdo pdo_pgsql pgsql
-
-COPY config/php.ini /usr/local/etc/php/php.ini
+FROM python:3.10.6-alpine3.16
+ENV PYTHONDONTWRITEBYTECODE 1
+RUN apk add build-base
+COPY ./requirements.txt /requirements.txt
+RUN pip install --no-cache-dir --upgrade -r /requirements.txt
+COPY ./app /app
+COPY ./static /static
+CMD ["uvicorn", "--proxy-headers", "--forwarded-allow-ips='*'", "--root-path", "/api", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

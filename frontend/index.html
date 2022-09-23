@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-gH2yIJqKdNHPEq0n4Mqa/HGKIhSkIHeL5AyhkYV8i59U5AR6csBvApHHNl/vI1Bx" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+
+<body>
+    <div class="container mt-5" id="app">
+        <div class="card card-body mt-3">
+            <div v-if="!access_token" class="row">
+                <div class="col"><input type="text" class="form-control" v-model="username"></div>
+                <div class="col"><input type="text" class="form-control" v-model="password"></div>
+                <div class="col"><input @click="signin" class="btn btn-primary" type="button" value="Войти"></div>
+            </div>
+            <div v-else>
+                <div class="col">Привет, {{username}}<br><input @click="signout" class="btn btn-danger" type="button"
+                        value="Выйти">
+                    <input @click="refresh" class="btn btn-danger" type="button" value="Рефрешнуть access">
+                </div>
+            </div>
+        </div>
+        <div class="card card-body mt-3">
+            <h5>Информация о пользователе</h5>
+        </div>
+        <div class="card card-body mt-3">
+            <h5>Активные сессии</h5>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th scope="col">Устройство</th>
+                        <th scope="col">Последнее обновление</th>
+                        <th scope="col"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="session in sessions"
+                        :style="{ backgroundColor: session.sid == sid ? 'lightgreen' : 'inherit'}">
+                        <td>{{ session.user_agent }}</td>
+                        <td>{{ session.last_updated }}</td>
+                        <td><button @click="terminate_session(session.sid)" class="btn btn-danger">Завершить</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-A3rJD856KowSb7dwlZdYEkO39Gagi7vIsF0jrRAoQmDKKtQBHUuLZ9AsSv4jD4Xa"
+        crossorigin="anonymous"></script>
+    <script>
+        function parseJwt(token) {
+            var base64Url = token.split('.')[1];
+            var base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            var jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function (c) {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }).join(''));
+            return JSON.parse(jsonPayload);
+        };
+
+        function token_check(promise, suc_hand = null, err_hand = null) {
+            promise.then(function (response) {
+                if (suc_hand) {
+                    suc_hand(response)
+                }
+            }).catch(function (error) {
+                if (error.response.status == 401) {
+                    alert("BAD TOKEN")
+                }
+                if (err_hand) {
+                    err_hand(error)
+                }
+            })
+        }
+
+        let endpoint = '/api/'
+
+        let app = new Vue({
+            el: '#app',
+            data: {
+                access_token: '',
+                refresh_token: '',
+                username: "admin@admin.com",
+                password: "root",
+                sessions: [],
+                sid: null
+            },
+            mounted() {
+                if (localStorage.access_token) {
+                    this.access_token = localStorage.access_token;
+                }
+                if (localStorage.refresh_token) {
+                    this.refresh_token = localStorage.refresh_token;
+                }
+                this.get_sessions()
+            },
+            watch: {
+                access_token(new_token) {
+                    localStorage.access_token = new_token;
+                },
+                refresh_token(new_token) {
+                    localStorage.refresh_token = new_token;
+                    if (new_token) {
+                        let payload = parseJwt(new_token)
+                        this.username = payload.sub
+                        this.sid = payload.sid
+                    } else {
+                        this.sid = null
+                    }
+                },
+            },
+            methods: {
+                signin: function () {
+                    let fd = new FormData();
+                    fd.append('username', this.username);
+                    fd.append('password', this.password);
+                    axios({
+                        method: "post",
+                        url: endpoint + 'auth/signin',
+                        data: fd,
+                        headers: { "Content-Type": "multipart/form-data" },
+                    })
+                        .then(function (response) {
+                            app.access_token = response.data.access_token
+                            app.refresh_token = response.data.refresh_token
+                            app.get_sessions()
+                        })
+                },
+                refresh: function () {
+                    let fd = new FormData();
+                    token_check(axios({
+                        method: "post",
+                        url: endpoint + 'auth/refresh',
+                        headers: {
+                            "Authorization": `Bearer ${this.refresh_token}`
+                        },
+                    }), function (response) {
+                        app.access_token = response.data.access_token
+                        app.refresh_token = response.data.refresh_token
+                        app.get_sessions()
+                    })
+                },
+                get_sessions: function () {
+                    axios({
+                        method: "get",
+                        url: endpoint + 'auth/sessions',
+                        headers: {
+                            "Authorization": `Bearer ${this.access_token}`
+                        },
+                    })
+                        .then(function (response) {
+                            app.sessions = response.data.content.map(function (session) {
+                                session.last_updated = (new Date(session.last_updated)).toLocaleString();
+                                return session
+                            })
+                        })
+                },
+                terminate_session: function (sid) {
+                    axios({
+                        method: "delete",
+                        url: endpoint + `auth/sessions/${sid}`,
+                        headers: {
+                            "Authorization": `Bearer ${this.access_token}`
+                        },
+                    })
+                        .then(function (response) {
+                            app.get_sessions()
+                        })
+                },
+                signout: function () {
+                    axios({
+                        method: "delete",
+                        url: endpoint + 'auth/signout',
+                        headers: {
+                            "Authorization": `Bearer ${this.access_token}`
+                        },
+                    })
+                        .then(function (response) {
+                            app.access_token = ''
+                            app.refresh_token = ''
+                            app.sessions = null
+                        })
+                },
+
+            },
+        })
+
+    </script>
+</body>
+
+</html>
