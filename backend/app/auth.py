@@ -10,7 +10,7 @@ from datetime import timedelta, datetime
 import os
 from app import models
 from app.utils import response
-from app.utils import get_user_agent
+from user_agents import parse
 
 # openssl rand -hex 32
 SECRET_KEY = os.environ.get("SECRET")
@@ -31,6 +31,7 @@ authRouter = APIRouter()
 class User(BaseModel):
     sid: str
     username: str
+    role: str
 
 
 class Tokens(BaseModel):
@@ -38,15 +39,17 @@ class Tokens(BaseModel):
     refresh_token: str
 
 
-class Session(BaseModel):
+class AuthSession(BaseModel):
     sid: str
     last_updated: datetime
     user_agent: str
 
 # #############################################################################################
 
+def get_user_agent(request: Request) -> str:
+    return str(parse(request.headers.get("User-Agent")))
 
-def create_token(sub: str, sid: str, expires_delta: timedelta, type: str) -> str:
+def token_create(sub: str, sid: str, expires_delta: timedelta, type: str) -> str:
     to_encode = {
         "sub": sub,
         "sid": sid,
@@ -57,20 +60,21 @@ def create_token(sub: str, sid: str, expires_delta: timedelta, type: str) -> str
     return encoded_jwt
 
 
-def create_tokens(username: str, sid: str) -> Tokens:
+def tokens_create(username: str, sid: str) -> Tokens:
     return Tokens(
-        access_token=create_token(username, sid, timedelta(
+        access_token=token_create(username, sid, timedelta(
             minutes=ACCESS_TOKEN_EXPIRE_MINUTES), "access"),
-        refresh_token=create_token(username, sid, timedelta(
+        refresh_token=token_create(username, sid, timedelta(
             minutes=REFRESH_TOKEN_EXPIRE_MINUTES), "refresh"),
     )
 
 
-def get_user_by_username(db: Session, username: str) -> User | None:
-    return db.query(models.Users).filter(models.Users.username.ilike(username)).first()
+def user_get_by_username(db: Session, username: str) -> User | None:
+    return db.query(models.User).filter(models.User.username.ilike(username)).first()
 
 
-def get_user(db: Session = Depends(get_db), access_token: str = Depends(oauth2_scheme)) -> User:
+
+def get_user(db: Session = Depends(get_db), access_token: str = Depends(oauth2_scheme)) -> models.User:
     try:
         payload = jwt.decode(access_token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
@@ -85,7 +89,14 @@ def get_user(db: Session = Depends(get_db), access_token: str = Depends(oauth2_s
     except JWTError:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный access токен", {
                             "WWW-Authenticate": "Bearer"})
-    return User(sid=sid, username=username)
+    db_user = db.query(models.User).filter(models.User.username == username).first()
+    return User(sid=sid, username=db_user.username, role=db_user.role)
+
+def get_admin_user(user: User = Depends(get_user)) -> User:
+    if user.role != "admin":
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Недостаточно прав", {
+                            "WWW-Authenticate": "Bearer"})
+    return user
 
 
 def get_refresh(db: Session = Depends(get_db), refresh_token: str = Depends(oauth2_scheme), request: Request = None) -> Tokens:
@@ -98,7 +109,7 @@ def get_refresh(db: Session = Depends(get_db), refresh_token: str = Depends(oaut
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Необходимо использовать refresh токен", {
                                 "WWW-Authenticate": "Bearer"})
     except ExpiredSignatureError:
-        db.query(models.Sessions).filter(models.Sessions.sid == sid).delete()
+        db.query(models.Session).filter(models.Session.sid == sid).delete()
         db.commit()
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Истек срок действия refresh токена. Сессия завершена.", {
                             "WWW-Authenticate": "Bearer"})
@@ -106,19 +117,19 @@ def get_refresh(db: Session = Depends(get_db), refresh_token: str = Depends(oaut
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный refresh токен", {
                             "WWW-Authenticate": "Bearer"})
 
-    session = db.query(models.Sessions).filter(
-        models.Sessions.sid == sid).first()
+    session = db.query(models.Session).filter(
+        models.Session.sid == sid).first()
     if session is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Сессии с таким refresh токеном не существует", {
                             "WWW-Authenticate": "Bearer"})
     if refresh_token != session.refresh_tokens[0]:
-        db.query(models.Sessions).filter(
-            models.Sessions.sid == session.sid).delete()
+        db.query(models.Session).filter(
+            models.Session.sid == session.sid).delete()
         db.commit()
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Данный refresh токен уже был использован ранее. Сессия завершена в целях безопасности.", {
                             "WWW-Authenticate": "Bearer"})
 
-    tokens = create_tokens(username, sid)
+    tokens = tokens_create(username, sid)
     if request:
         session.user_agent = get_user_agent(request)
     session.last_updated = datetime.now()
@@ -130,11 +141,11 @@ def get_refresh(db: Session = Depends(get_db), refresh_token: str = Depends(oaut
 
 
 @authRouter.post("/signup", response_model=None)
-def sign_up(username: str = Form(), password: SecretStr = Form(), db: Session = Depends(get_db)):
-    if get_user_by_username(db, username) is not None:
+def sign_up(username: str = Form(), password: SecretStr = Form(), db: Session = Depends(get_db), user: User = Depends(get_admin_user)):
+    if user_get_by_username(db, username) is not None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             f"Имя пользователя '{username}' уже занято")
-    db.add(models.Users(username=username,
+    db.add(models.User(username=username,
            password_hash=pwd_context.hash(password.get_secret_value())))
     db.commit()
     return response(None, f"Пользователь {username} зарегистрирован!")
@@ -142,7 +153,7 @@ def sign_up(username: str = Form(), password: SecretStr = Form(), db: Session = 
 
 @authRouter.post("/signin", response_model=Tokens)
 def sign_in(request: Request, username: str = Form(), password: SecretStr = Form(), db: Session = Depends(get_db)):
-    user = get_user_by_username(db, username)
+    user = user_get_by_username(db, username)
     if user is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             "Неверное имя пользователя")
@@ -150,8 +161,8 @@ def sign_in(request: Request, username: str = Form(), password: SecretStr = Form
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Неверное пароль")
 
     sid = str(uuid.uuid4())
-    tokens = create_tokens(user.username, sid)
-    db.add(models.Sessions(
+    tokens = tokens_create(user.username, sid)
+    db.add(models.Session(
         sid=sid,
         username=user.username,
         last_updated=datetime.now(),
@@ -164,8 +175,8 @@ def sign_in(request: Request, username: str = Form(), password: SecretStr = Form
 
 @authRouter.delete("/signout", response_model=None)
 def sign_out(user: User = Depends(get_user), db: Session = Depends(get_db)):
-    db.query(models.Sessions).filter(models.Sessions.username ==
-                                     user.username).filter(models.Sessions.sid == user.sid).delete()
+    db.query(models.Session).filter(models.Session.username ==
+                                     user.username).filter(models.Session.sid == user.sid).delete()
     db.commit()
     return response(None, "Сессия завершена")
 
@@ -182,25 +193,25 @@ def refresh(tokens: Tokens = Depends(get_refresh)):
 
 @authRouter.get("/sessions", response_model=None)
 def get_all_sessions(user: str = Depends(get_user), db: Session = Depends(get_db)):
-    sessions = db.query(models.Sessions).filter(models.Sessions.username ==
-                                                user.username).order_by(models.Sessions.last_updated.desc()).all()
-    return response([Session(sid=session.sid, last_updated=session.last_updated, user_agent=session.user_agent) for session in sessions])
+    sessions = db.query(models.Session).filter(models.Session.username ==
+                                                user.username).order_by(models.Session.last_updated.desc()).all()
+    return response([AuthSession(**session.__dict__) for session in sessions])
 
 
 @authRouter.delete("/sessions", response_model=None)
 def terminate_all_sessions(user: User = Depends(get_user), db: Session = Depends(get_db)):
-    db.query(models.Sessions).filter(models.Sessions.username ==
-                                     user.username).filter(models.Sessions.sid != user.sid).delete()
+    db.query(models.Session).filter(models.Session.username ==
+                                     user.username).filter(models.Session.sid != user.sid).delete()
     db.commit()
     return response(None, "Все остальные сессии завершены")
 
 
 @authRouter.delete("/sessions/{sid}", response_model=None)
-def terminate_session(sid: str, user: str = Depends(get_user), db: Session = Depends(get_db)):
-    if sid == user.sid:
+def terminate_session(sid: uuid.UUID, user: str = Depends(get_user), db: Session = Depends(get_db)):
+    if str(sid) == user.sid:
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             "Выбранная сессия является текущей")
-    db.query(models.Sessions).filter(models.Sessions.username ==
-                                     user.username).filter(models.Sessions.sid == sid).delete()
+    db.query(models.Session).filter(models.Session.username ==
+                                     user.username).filter(models.Session.sid == str(sid)).delete()
     db.commit()
     return response(None, "Выбранная сессия завершена")

@@ -1,7 +1,14 @@
 from app.database import Base
 
-Users = Base.classes.users
-Sessions = Base.classes.sessions
+User = Base.classes.users
+Session = Base.classes.sessions
+File = Base.classes.files
+Category = Base.classes.categories
+Tag = Base.classes.tags
+# TagsDependency = Base.classes.tags_dependencies
+FilesTags = Base.classes.files_tags
+
+
 # Strategies = Base.classes.strategies
 # Field_ner_categories = Base.classes.field_ner_categories
 # Ner_categories = Base.classes.ner_categories

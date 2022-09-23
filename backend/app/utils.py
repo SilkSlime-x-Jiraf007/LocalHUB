@@ -1,82 +1,41 @@
-import enum
 import hashlib
-from fastapi import Request
-from sqlalchemy.engine import Row
-import os
-from app.models import *
 from typing import Any, BinaryIO
-from app.schemas import Tree
-from user_agents import parse
+from pathlib import Path
+from pydantic import BaseModel, create_model
+import random
+import string
 
-def get_user_agent(request: Request) -> str:
-    return str(parse(request.headers.get("User-Agent")))
+class Response(BaseModel):
+    message: str | None = None
+    content: Any | None = None
 
-def get_children(result, parent_id = 0) -> list[Tree] | None:
-    children = []
-    for row in result:
-        if row.parent == parent_id:
-            children.append(Tree(**{
-                'value' : row.id,
-                'label' : row.name,
-                'className' : ('new' if row.new else '') if hasattr(row, 'new') else '',
-                'children' : get_children(result, row.id)
-            }))
-    return children if len(children) else None
+def get_random_string(k=20):
+    return ''.join(random.choices(string.ascii_uppercase, k=k))
 
+def wrapper(type, name: str | None = None) -> BaseModel:
+    if name is None:
+        name = get_random_string()
+    return create_model(name, content=(type, ...), __base__=Response)
 
-
-def response(content = None, message = None):
+def response(content: Any | None = None, message: str | None = None) -> Response:
     return {
         'content': content,
         'message': message
     }
 
-class WorkState(enum.IntEnum):
-    CREATED = 0
-    QUEUED = 1
-    PROCESSING = 2
-    COMPLETE = 3
-    ERROR = -1
 
 
+def md5(file: BinaryIO):
+    hash_md5 = hashlib.md5()
+    for chunk in iter(lambda: file.read(4096), b""):
+        hash_md5.update(chunk)
+    file.seek(0)
+    return hash_md5.hexdigest()
 
-def model_to_dict(model) -> dict:
-    row_dict = {}
-    model_dict = {f"{column.name}": getattr(
-        model, column.name) for column in model.__table__.columns}
-    for key in model_dict:
-        if key not in row_dict:
-            row_dict[key] = model_dict[key]
-    return row_dict
-    
-
-def models_to_dict(models: list[Any]) -> list[dict]:
-    return [model_to_dict(model) for model in models]
-
-def row_to_dict(row: Row) -> dict:
-    row_dict = {}
-    for prefix, model in row._asdict().items():
-        model_dict = {f"{prefix}__{column.name}": getattr(
-            model, column.name) for column in model.__table__.columns}
-        for key in model_dict:
-            if key not in row_dict:
-                row_dict[key] = model_dict[key]
-    return row_dict
-
-
-def rows_to_dict(rows: list[Row]) -> list[dict]:
-    return [row_to_dict(row) for row in rows]
-
-
-def dict_to_row(dict: dict) -> tuple:
-    def factory(classname: str):
-        return globals()[classname.capitalize()]
-    models_dict = {}
-    for key, value in dict.dict().items():
-        table, column = key.split('__')
-        if table not in models_dict:
-            models_dict[table] = {}
-        models_dict[table][column] = value
-    objects = tuple(factory(class_name)(**model_dict)
-                    for class_name, model_dict in models_dict.items())
-    return objects
+def uniquify(filename: Path, same_files: list[str]) -> Path:
+    counter = 1
+    temp_path = filename
+    while str(temp_path) in same_files:
+        temp_path = filename.with_stem(f"{filename.stem} ({counter})")
+        counter+=1
+    return temp_path
