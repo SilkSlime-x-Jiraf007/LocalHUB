@@ -1,8 +1,8 @@
-strategies/*
-!strategies/.gitkeep
+data/*
+!data/.gitkeep
 
-logs/*
-!logs/.gitkeep
+# logs/*
+# !logs/.gitkeep
 
-config/*
-!config/.gitkeep
+# config/*
+# !config/.gitkeep
