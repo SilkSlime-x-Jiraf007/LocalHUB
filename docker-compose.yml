@@ -2,18 +2,22 @@ version: '3'
 services:
   nginx:
     restart: always
-    build: ./nginx
+    build:
+      context: ./nginx
+      network: host
     volumes:
       - ./data:/var/www/data
       - ./frontend:/var/www/front
     ports:
-      - "3333:80"
+      - "4488:80"
     depends_on:
       - backend
       - pgadmin
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      network: host
     restart: always
     environment:
       PYTHONUNBUFFERED: "True"
@@ -32,8 +36,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    ports:
-      - "8000:8000"
 
   postgres:
     image: postgres:14-alpine3.16
