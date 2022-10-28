@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app import models
 from app.utils import response, wrapper, Response, BaseModel
 from app.auth import get_user, get_admin_user, User
-from crud import categories
+from app.crud import categories
 
 
 router = APIRouter()

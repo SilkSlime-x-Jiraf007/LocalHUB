@@ -81,13 +81,13 @@ def get_user(db: Session = Depends(get_db), access_token: str = Depends(oauth2_s
         sid: str = payload.get("sid")
         type: str = payload.get("type")
         if type != "access":
-            raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"Необходимо использовать access токен", {
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Необходимо использовать access токен", {
                                 "WWW-Authenticate": "Bearer"})
     except ExpiredSignatureError:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Истек срок действия access токена", {
                             "WWW-Authenticate": "Bearer"})
     except JWTError:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный access токен", {
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Неверный access токен", {
                             "WWW-Authenticate": "Bearer"})
     db_user = db.query(models.User).filter(models.User.username == username).first()
     return User(sid=sid, username=db_user.username, role=db_user.role)

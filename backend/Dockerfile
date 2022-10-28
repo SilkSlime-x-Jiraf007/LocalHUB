@@ -1,6 +1,8 @@
-FROM python:3.10.6-alpine3.16
+# FROM python:3.10.6-alpine3.16
+FROM python:3.10.8-slim-bullseye
 ENV PYTHONDONTWRITEBYTECODE 1
-RUN apk add build-base
+RUN apt-get update -y
+RUN apt-get install -y mediainfo
 COPY ./requirements.txt /requirements.txt
 RUN pip install --no-cache-dir --upgrade -r /requirements.txt
 COPY ./app /app

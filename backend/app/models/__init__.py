@@ -8,6 +8,10 @@ Tag = Base.classes.tags
 # TagsDependency = Base.classes.tags_dependencies
 FilesTags = Base.classes.files_tags
 
+Image = Base.classes.images
+Video = Base.classes.videos
+Story = Base.classes.stories
+Manga = Base.classes.mangas
 
 # Strategies = Base.classes.strategies
 # Field_ner_categories = Base.classes.field_ner_categories
