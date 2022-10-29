@@ -1,5 +1,17 @@
 version: '3'
 services:
+  frontend:
+    image: lh_frontend
+    build:
+      context: ./frontend
+      network: host
+    restart: always
+    volumes:
+      - ./frontend/src:/app/src
+    ports:
+      - "2222:5173"
+    environment:
+      - CHOKIDAR_USEPOLLING=true
   nginx:
     image: lh_nginx
     build:
@@ -8,7 +20,7 @@ services:
     restart: always
     volumes:
       - ./data:/var/www/data
-      - ./frontend:/var/www/front
+      # - ./frontend:/var/www/front
     depends_on:
       - backend
       - pgadmin
