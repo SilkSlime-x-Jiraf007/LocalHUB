@@ -23,7 +23,4 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
-import Avatar from '../components/Avatar.vue'
-import Amogus from '../components/icons/Amogus.vue'
 </script>

@@ -87,7 +87,9 @@ const handleSelect = (key) => {
             alert('Тоже нет!');
             break;
         case "logout":
+            // TODO clear session
             userStore.clearUser()
+            router.push({name: "SignIn"})
             break;
     }
 }
