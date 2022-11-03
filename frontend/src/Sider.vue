@@ -7,8 +7,9 @@
         </n-drawer-content>
     </n-drawer>
     <n-layout-sider v-else :native-scrollbar="false" content-style="padding: 24px;" bordered :width="menuWidth">
-        <router-link to="/">Fome</router-link>
-        <router-link to="/about">About</router-link>
+        <n-space>
+            <router-link v-for="r in routerOptions" :to="{name: r.name}">{{r.display}}</router-link>
+        </n-space>
     </n-layout-sider>
 </template>
 <script setup>
@@ -21,7 +22,18 @@ const {siderWidth, drawer} = defineProps({
 
 const toggle = (e) => {
     emit('update:drawer', drawer)
-} 
+}
+
+const routerOptions = [
+    {
+        display: "mpmee",
+        name: "Home",
+    },
+    {
+        display: "boutt",
+        name: "About",
+    }
+]
 
 const breakpoints = useBreakpoints(breakpointsTailwind)
 const mobile = breakpoints.smallerOrEqual('2xl')
