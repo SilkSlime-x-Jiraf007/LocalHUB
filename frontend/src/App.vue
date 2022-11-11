@@ -1,6 +1,6 @@
 <template>
     <n-layout style="height: 100vh;">
-        <Header v-if="userStore.hasUser()" v-model:drawer="drawer" titleSuffix="Test" />
+        <Header v-if="userStore.hasUser()" v-model:drawer="drawer"/>
         <n-layout position="absolute" has-sider class="container" :style="{top: userStore.hasUser() ? 'var(--header-height)' : '0'}">
             <Sider v-if="userStore.hasUser()" v-model:drawer="drawer" :width="siderWidth" />
             <n-layout content-style="padding: 24px;" :native-scrollbar="false">

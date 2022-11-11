@@ -27,16 +27,14 @@ const errorMessages = ref([])
 
 
 const signin = async () => {
-    let bodyFormData = new FormData();
-    bodyFormData.append('username', username.value);
-    bodyFormData.append('password', password.value);
-    const { content, message, error } = await userSignIn(bodyFormData);
-    if (error) {
-        errorMessages.value.push(error)
-        return
+    try {
+        const {content, message} = await userSignIn(username.value, password.value);
+        userStore.setTokens(content.access_token, content.refresh_token)
+        router.push('/')
+    } catch ({content, message}) {
+        console.log(content)
+        console.log(message)
     }
-    userStore.setTokens(content.access_token, content.refresh_token)
-    router.push('/')
 }
 </script>
 <style scoped>

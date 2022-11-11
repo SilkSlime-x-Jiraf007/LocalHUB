@@ -1,35 +1,64 @@
 import axios from "axios";
+
 const apiBaseUrl = "http://localhost:3030/api";
-const instance = axios.create({
+export const instance = axios.create({
     baseURL: apiBaseUrl
 });
 
-const authorizedRequestConfig = { headers: { Authorization: "Bearer " + localStorage.getItem("accessToken") } }
-
-const getData = (response) => {
-    let res = {
-        content: null,
-        message: null
+instance.interceptors.request.use(function (config) {
+    if (!config.headers.Authorization && localStorage.getItem("access_token") != "") {
+        config.headers.Authorization = `Bearer ${localStorage.getItem("access_token")}`
     }
-    if ('data' in response)
-        if ('content' in response.data && 'message' in response.data)
-            if ('content' in response.data)
-                res.content = response.data.content
-            if ('message' in response.data)
-                res.content = response.data.content
-        else
-            res.content = response.data
-    return res
+    return config;
+}, function (error) {
+    return Promise.reject(error);
+});
+
+instance.interceptors.response.use(function (response) {
+    if ('content' in response.data && 'message' in response.data) {
+        return {
+            content: response.data.content,
+            message: response.data.message,
+        }
+    }
+    return {
+        content: response.data,
+        message: null,
+    }
+}, async function (error) {
+    if (error.response.status == 401 && error.response?.data?.detail == 'The access token has expired' && !error.config._retry) {
+        error.config._retry = true;
+        const { content, message } = await instance.post("/auth/refresh", null, { headers: { Authorization: `Bearer ${localStorage.getItem("refresh_token")}` } })
+        localStorage.setItem("access_token", content.access_token)
+        localStorage.setItem("refresh_token", content.refresh_token)
+        return instance(error.config);
+    }
+    return Promise.reject({
+        content: null,
+        message: error.response.data.detail
+    });
+}
+);
+
+
+export const userSignIn = (username, password) => {
+    let bodyFormData = new FormData();
+    bodyFormData.append('username', username);
+    bodyFormData.append('password', password);
+    return instance.post("/auth/signin", bodyFormData)
 }
 
-const getError = (error) => {
-    if ('response' in error)
-        if ('data' in error.response)
-            if ('detail' in error.response.data)
-                return {error: error.response.data.detail}
-    return {error: "Unknown error"}
+export const getUserSessions = () => {
+    return instance.get('/auth/sessions')
 }
 
+export const terminateUserSession = (sid) => {
+    return instance.delete(`/auth/sessions/${sid}`)
+}
 
-export const userSignIn = (fd) => instance.post("/auth/signin", fd).then(result => getData(result)).catch(thing => getError(thing));
-export const userEdit = (username, password) => instance.put("/users/self", {username: username, password: password}, authorizedRequestConfig).then(result => result.data);
+export const uploadFile = (file, group=null) => {
+    let bodyFormData = new FormData();
+    bodyFormData.append('username', username);
+    bodyFormData.append('password', password);
+    return instance.post(`/files, `)
+}

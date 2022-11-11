@@ -9,7 +9,7 @@
         </n-button>
         <n-text tag="div" class="ui-logo" :depth="1">
             <img height="32px" src="@/assets/logo.svg">
-            <span>LocalHUB{{ titleSuffix ? ` | ${titleSuffix}` : "" }}</span>
+            <span>LocalHUB{{ route.name ? ` | ${route.name}` : "" }}</span>
         </n-text>
         <div style="flex-grow: 10;" />
         <n-divider vertical />
@@ -29,30 +29,25 @@
 </template>
 <script setup>
 import { h } from 'vue';
-import { useRouter } from 'vue-router'
-import { useUserStore } from '@/stores/user'
-import { breakpointsTailwind, useBreakpoints } from '@vueuse/core'
-import { MenuRound } from '@vicons/material'
+import { useRouter, useRoute } from 'vue-router'
 import { NIcon } from "naive-ui";
+import { breakpointsTailwind, useBreakpoints } from '@vueuse/core'
+import { PersonOutlineOutlined, SettingsRound, LogOutOutlined, MenuRound } from "@vicons/material";
+
+import { useUserStore } from '@/stores/user'
+import { getUserSessions, terminateUserSession } from '@/utils/api'
 import Avatar from '@/components/Avatar.vue'
-import {
-    PersonOutlineOutlined as UserIcon,
-    EditFilled as EditIcon,
-    LogOutOutlined as LogoutIcon
-} from "@vicons/material";
-const { titleSuffix } = defineProps({
-    titleSuffix: {
-        default: null
-    },
-    drawer: {}
-})
+
+const { drawer } = defineProps(['drawer'])
 
 const breakpoints = useBreakpoints(breakpointsTailwind)
+const router = useRouter()
+const route = useRoute()
+const userStore = useUserStore()
+
 const mobileMini = breakpoints.smallerOrEqual('md')
 const mobile = breakpoints.smallerOrEqual('2xl')
 
-const router = useRouter()
-const userStore = useUserStore()
 
 const renderIcon = (icon) => {
     return () => {
@@ -61,35 +56,36 @@ const renderIcon = (icon) => {
         });
     };
 };
+
 const userOptions = [
     {
         label: "Profile",
         key: "profile",
-        icon: renderIcon(UserIcon)
+        icon: renderIcon(PersonOutlineOutlined)
     },
     {
-        label: "Edit Profile",
+        label: "Profile Settings",
         key: "editProfile",
-        icon: renderIcon(EditIcon)
+        icon: renderIcon(SettingsRound)
     },
     {
         label: "Logout",
         key: "logout",
-        icon: renderIcon(LogoutIcon)
+        icon: renderIcon(LogOutOutlined)
     }
 ]
 const handleSelect = (key) => {
     switch (key) {
         case "profile":
-            alert('Неа');
+            router.push({ name: "Profile" })
             break;
         case "editProfile":
-            alert('Тоже нет!');
+            router.push({ name: "Settings" })
             break;
         case "logout":
-            // TODO clear session
+            terminateUserSession(userStore.sid);
             userStore.clearUser()
-            router.push({name: "SignIn"})
+            router.push({ name: "Sign In" })
             break;
     }
 }
