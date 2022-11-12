@@ -1,16 +1,22 @@
 CREATE TYPE filetype AS ENUM ('Image', 'Video', 'Text', 'Manga', 'Other');
-
+CREATE TYPE filestate AS ENUM ('processing', 'collision', 'private', 'public')
 CREATE TABLE files (
+    id BIGSERIAL PRIMARY KEY,
     hash CHARACTER VARYING(32) PRIMARY KEY,
     filename CHARACTER VARYING NOT NULL UNIQUE,
     owner CHARACTER VARYING REFERENCES users (username) ON DELETE SET NULL ON UPDATE CASCADE,
     description CHARACTER VARYING DEFAULT '',
     upload_time timestamp with time zone NOT NULL,
     size CHARACTER VARYING NOT NULL,
-    type filetype NOT NULL,
+    type filetype NOT NULL DEFAULT 'Other',
     group_id UUID,
-    confirmed BOOLEAN NOT NULL DEFAULT 'false'
+    state filestate NOT NULL DEFAULT 'processing'
 );
+CREATE UNIQUE INDEX ON files (hash) WHERE state = 'public';
+
+
+
+
 
 CREATE TABLE categories (
     id SERIAL PRIMARY KEY,
