@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from app.auth import authRouter
-from app.routers import FilesRouter, CategoriesRouter, TagsRouter, FilesTagsRouter
+from app.routers import FilesRouter
+# from app.routers import CategoriesRouter, TagsRouter, FilesTagsRouter
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
@@ -16,7 +17,7 @@ app.add_middleware(
 )
 
 app.include_router(authRouter, prefix="/auth", tags=["auth"])
-app.include_router(FilesTagsRouter, prefix="/files", tags=["file_tags"])
+# app.include_router(FilesTagsRouter, prefix="/files", tags=["file_tags"])
 app.include_router(FilesRouter, prefix="/files", tags=["files"])
-app.include_router(CategoriesRouter, prefix="/categories", tags=["categories"])
-app.include_router(TagsRouter, prefix="/tags", tags=["tags"])
+# app.include_router(CategoriesRouter, prefix="/categories", tags=["categories"])
+# app.include_router(TagsRouter, prefix="/tags", tags=["tags"])

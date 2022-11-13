@@ -26,18 +26,17 @@ export function apiWrapper() {
         );
     };
 
-    const wrap = async (apiCall, default_response = null) => {
+    const wrap = async (apiCall, callback = null, errorCallback = null) => {
         try {
             const { content, message } = await apiCall();
-            
             if (message) messager.success(message, {render: renderMessage})
-            return content
+            if (callback) callback(content)
         } catch ({ content, message }) {
             if (message) messager.error(message, {render: renderMessage})
-
+            if (errorCallback) errorCallback(content)
+            // TODO
+            // ROUTER THINGS
             // if (message == "")
-
-            return default_response
         }
     }
     return { wrap }

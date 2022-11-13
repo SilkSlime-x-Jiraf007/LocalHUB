@@ -3,10 +3,10 @@ from app.database import Base
 User = Base.classes.users
 Session = Base.classes.sessions
 File = Base.classes.files
-Category = Base.classes.categories
-Tag = Base.classes.tags
+# Category = Base.classes.categories
+# Tag = Base.classes.tags
 # TagsDependency = Base.classes.tags_dependencies
-FilesTags = Base.classes.files_tags
+# FilesTags = Base.classes.files_tags
 
 Image = Base.classes.images
 Video = Base.classes.videos

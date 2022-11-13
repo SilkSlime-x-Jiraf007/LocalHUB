@@ -5,7 +5,7 @@
                 <n-input required v-model:value="username" type="text" placeholder="Username" />
                 <n-input required v-model:value="password" type="password" show-password-on="click"
                     placeholder="Password" />
-                <n-button @click="signin" type="primary" block>Sign In</n-button>
+                <n-button @click="wSignIn" type="primary" block>Sign In</n-button>
             </n-space>
             <template #footer v-if="errorMessages.length != 0">
                 <div v-for="errorMessage in errorMessages" class="error-message">{{ errorMessage }}</div>
@@ -16,8 +16,12 @@
 <script setup>
 import { ref } from 'vue';
 import { userSignIn } from '@/utils/api'
+import { apiWrapper } from '@/utils/apiWrapper'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+
+
+const apiw = apiWrapper()
 const router = useRouter()
 const userStore = useUserStore()
 
@@ -25,17 +29,23 @@ const username = ref("")
 const password = ref("")
 const errorMessages = ref([])
 
-
-const signin = async () => {
-    try {
-        const {content, message} = await userSignIn(username.value, password.value);
+const wSignIn = () => {
+    apiw.wrap(() => userSignIn(username.value, password.value), (content) => {
         userStore.setTokens(content.access_token, content.refresh_token)
         router.push('/')
-    } catch ({content, message}) {
-        console.log(content)
-        console.log(message)
-    }
+    })
 }
+
+// const signin = async () => {
+//     try {
+//         const { content, message } = await userSignIn(username.value, password.value);
+
+//         router.push('/')
+//     } catch ({ content, message }) {
+//         console.log(content)
+//         console.log(message)
+//     }
+// }
 </script>
 <style scoped>
 .card-wrapper {

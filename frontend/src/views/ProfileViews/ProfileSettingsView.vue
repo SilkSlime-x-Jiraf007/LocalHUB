@@ -3,7 +3,7 @@
     <n-tabs type="line" animated>
       <n-tab-pane name="sessions" :tab="`Sessions (${sessionData.length})`">
         <!-- <n-button @click="getSessions">Refresh</n-button> -->
-        <SessionsTable :sessionData="sessionData" @terminate="terminateSession" />
+        <SessionsTable :sessionData="sessionData" @terminate="wTerminateUserSession" />
       </n-tab-pane>
       <n-tab-pane name="tags" tab="Tags">
         Тут будет глобальная настройка тэгов
@@ -25,20 +25,17 @@ import { apiWrapper } from '@/utils/apiWrapper.js'
 
 
 const sessionData = ref([])
-const messager = useMessage()
 const apiw = apiWrapper()
 
 
-async function getSessions() {
-  const content = await apiw.wrap(() => getUserSessions())
-  sessionData.value = content
+function wGetSessions() {
+  apiw.wrap(() => getUserSessions(), (content) => { sessionData.value = content })
 }
-async function terminateSession(sid) {
-  await apiw.wrap(() => terminateUserSession(sid))
-  await getSessions()
+function wTerminateUserSession(sid) {
+  apiw.wrap(() => terminateUserSession(sid), (content) => { wGetSessions() })
 }
 
-getSessions()
+wGetSessions()
 </script>
 
 <style scoped>

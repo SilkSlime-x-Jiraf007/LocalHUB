@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Dict, List
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, Path as QueryPath, Query
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, Path as QueryPath, Query, BackgroundTasks
 from pydantic import BaseModel
 from app.database import get_db
 from sqlalchemy.orm import Session, Query as SqlQuery
@@ -16,6 +16,8 @@ import enum
 import imagehash
 from pymediainfo import MediaInfo, Track
 from bitstring import BitArray
+import time
+import random
 # #############################################################################################
 
 
@@ -26,7 +28,6 @@ router = APIRouter()
 
 
 ROOT = Path("/data").resolve()
-
 
 class OrderColumns(enum.Enum):
     upload_time = 'upload_time'
@@ -40,7 +41,7 @@ class OrderType(enum.Enum):
 
 
 class File(BaseModel):
-    hash: str
+    id: int
     uri: str
     owner: str
     description: str
@@ -49,6 +50,8 @@ class File(BaseModel):
     name: str
     type: str
     group: str | None
+    state: str
+    message: str | None
 
 
 class FilePut(BaseModel):
@@ -62,29 +65,29 @@ class FileType(enum.Enum):
     MANGA = 'Manga'
     OTHER = 'Other'
 
+class FileData(BaseModel):
+    type: FileType
+    size: str
+
+class ImageData(FileData):
+    width: int
+    height: int
+    phash: int
+    colorhash: int
+
+class VideoData(FileData):
+    width: int
+    height: int
+    duration: int
+    has_audio: bool
+
+class TextData(FileData):
+    pass
+
+class MangaData(FileData):
+    pass
+
 def get_file_data(filepath: Path):
-    class FileData(BaseModel):
-        type: FileType
-        size: str
-
-    class ImageData(FileData):
-        width: int
-        height: int
-        phash: int
-        colorhash: int
-
-    class VideoData(FileData):
-        width: int
-        height: int
-        duration: int
-        has_audio: bool
-
-    class TextData(FileData):
-        pass
-
-    class MangaData(FileData):
-        pass
-
     tracks: Dict[str, Track] = {track.track_type:track for track in MediaInfo.parse(filepath).tracks}
     file_type = FileType.OTHER
     size = str(tracks['General'].file_size)
@@ -147,39 +150,41 @@ def get_human_size(bytes: int) -> str:
 # #############################################################################################
 
 
-def file_get_dir_path(root: Path, hash: str, split: tuple = (1, 2)) -> Path:
-    path = root
+def file_get_dir_path_from_hash(hash: str, split: tuple = (1, 2)) -> Path:
+    path = Path("public")
     i = 0
     for s in split:
         path = path / hash[i:i+s]
         i += s
     return path
 
-
-def file_get_name(filename: Path) -> str:
-    return str(Path(filename).stem)
-
+def db_file_get_uri(db_file) -> Path:
+    if db_file.state == "public":
+        return file_get_dir_path_from_hash(db_file.hash) / db_file.filename
+    else:
+        return Path("user") / db_file.owner / db_file.filename
 
 def convert(db_file: models.File) -> File:
     return File(
-        hash=db_file.hash,
+        id=db_file.id,
         owner=db_file.owner,
         description=db_file.description,
         upload_time=db_file.upload_time,
         size=get_human_size(int(db_file.size)),
-        uri=str(file_get_dir_path(Path(), db_file.hash) / db_file.filename),
-        name=file_get_name(db_file.filename),
+        uri=str(db_file_get_uri(db_file)),
+        name=str(Path(db_file.filename).stem),
         type=db_file.type,
-        group=db_file.group_id
+        group=db_file.group_id,
+        state=db_file.state,
+        message=db_file.message
     )
 
 
-def file_get_by_hash(db: Session, hash: str, username: str | None = None) -> models.File | None:
-    db_file = db.query(models.File).filter(models.File.hash == hash)
+def file_get_by_id(db: Session, id: int, username: str | None = None) -> models.File | None:
+    db_file = db.query(models.File).filter(models.File.id == id)
     if username:
         db_file = db_file.filter(models.File.owner == username)
-    db_file = db_file.order_by(models.File.upload_time.desc()).first()
-    return db_file
+    return db_file.first()
 
 
 def files_get_same_names(db: Session, filename: Path) -> List[str]:
@@ -187,7 +192,23 @@ def files_get_same_names(db: Session, filename: Path) -> List[str]:
     return [same_file.filename for same_file in same_files]
 
 
-def files_get_all_query(
+def files_get_all_private_query(
+    db: Session,
+    username: str | None = None,
+    num: int = 10,
+    page: int = 1,
+    all: bool = False,
+) -> SqlQuery:
+    db_files = db.query(models.File).filter(models.File.state != "public")
+    if username:
+        db_files = db_files.filter(models.File.owner == username)
+    db_files = db_files.order_by(models.File.upload_time.desc())
+    if not all:
+        return db_files.offset((page-1)*num).limit(num)
+    return db_files
+
+
+def files_get_all_public_query(
     db: Session,
     username: str | None = None,
     num: int = 10,
@@ -203,6 +224,7 @@ def files_get_all_query(
     select_list: list = [models.File]
 ) -> SqlQuery:
     db_files = db.query(*select_list)
+    db_files = db.query(models.File).filter(models.File.state == "public")
     if username:
         db_files = db_files.filter(models.File.owner == username)
     if name:
@@ -225,33 +247,33 @@ def files_get_all_query(
     return db_files
 
 
-def file_upload(db: Session, uploaded_file: UploadFile, group: UUID, user: User) -> bool:
-    hash = md5(uploaded_file.file)
-    existed_file = file_get_by_hash(db, hash)
-    if existed_file:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Такой файл уже был загружен под именем '{existed_file.filename}' ({hash}) пользователем '{existed_file.owner}'")
-    filename = Path(uploaded_file.filename)
-    filename = uniquify(filename, files_get_same_names(db, filename))
-    path = file_get_dir_path(ROOT, hash) / filename
-    if not path.parent.exists():
-        path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "wb") as file:
-        file.write(uploaded_file.file.read())
-    filedata = get_file_data(path)
+def file_calculate_params(db: Session, file):
+    path = ROOT / db_file_get_uri(file)
     try:
-        db.add(models.File(
-            hash=hash,
-            filename=str(filename),
-            owner=user.username,
-            description="",
-            upload_time=datetime.now(),
-            size=filedata.size,
-            type=filedata.type.value,
-            group_id=str(group) if group else None
-        ))
+        hash = md5(path)
+        existed_private_file = db.query(models.File).filter(models.File.hash == hash).filter(models.File.owner == file.owner).filter(models.File.state != "public").first()
+        existed_public_file = db.query(models.File).filter(models.File.hash == hash).filter(models.File.state == "public").first()
+        if existed_private_file:
+            file.message = f"Collision with your non-public {existed_private_file.filename}"
+            file.state = "error"
+            db.commit()
+            os.remove(path)
+            return
+        if existed_public_file:
+            file.message = f"Collision with your non-public {existed_public_file.filename}"
+            file.state = "error"
+            db.commit()
+            os.remove(path)
+            return
+        
+        file.hash = hash
+        filedata = get_file_data(path)
+        file.size = filedata.size
+        file.type = filedata.type.value
+        
         if filedata.type == FileType.IMAGE:
             db.add(models.Image(
-                hash=hash,
+                id=file.id,
                 width=filedata.width,
                 height=filedata.height,
                 phash=filedata.phash,
@@ -259,7 +281,7 @@ def file_upload(db: Session, uploaded_file: UploadFile, group: UUID, user: User)
             ))
         elif filedata.type == FileType.VIDEO:
             db.add(models.Video(
-                hash=hash,
+                id=file.id,
                 width=filedata.width,
                 height=filedata.height,
                 duration=filedata.duration,
@@ -267,69 +289,125 @@ def file_upload(db: Session, uploaded_file: UploadFile, group: UUID, user: User)
             ))
         elif filedata.type == FileType.TEXT:
             db.add(models.Story(
-                hash=hash,
+                id=file.id
             ))
         elif filedata.type == FileType.MANGA:
             db.add(models.Manga(
-                hash=hash,
+                id=file.id
             ))
-
+        file.state = "private"
         db.commit()
-        return True
+    except Exception as e:
+        db.rollback()
+        file.state = "error"
+        file.message = str(e)
+        db.commit()
+        os.remove(path)
+    
+
+def file_upload(
+        db: Session,
+        uploaded_file: UploadFile,
+        bg_tasks: BackgroundTasks,
+        user: User
+    ):
+    parent_path = ROOT / "user" / user.username
+    if not parent_path.exists():
+        parent_path.mkdir(exist_ok=True)
+    filename = Path(uploaded_file.filename)
+    filename = uniquify(filename, files_get_same_names(db, filename))
+    path = parent_path / filename
+    with open(path, "wb") as file:
+        file.write(uploaded_file.file.read())
+    try:
+        file = models.File(
+            filename=str(filename),
+            owner=user.username,
+            upload_time=datetime.now(),
+            size=0,
+        )
+        db.add(file)
+        db.flush()
+        db.refresh(file)
+        bg_tasks.add_task(file_calculate_params, db, file)
+        db.commit()
     except:
         db.rollback()
         os.remove(path)
         raise
 
 
-def file_update(db: Session, hash: str, file_info: FilePut, username: str | None = None) -> None:
-    db_file = file_get_by_hash(db, hash, username)
-    if db_file is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Файл не найден")
-    if file_info.description is not None:
-        db_file.description = file_info.description
-    old_filename = Path(db_file.filename)
-    if file_info.name != old_filename and file_info.name is not None:
-        new_filename = old_filename.with_stem(file_info.name)
-        db_file.filename = str(new_filename)
-        dir_path = file_get_dir_path(ROOT, db_file.hash)
-        old_path = dir_path / old_filename
-        new_path = dir_path / new_filename
-        if new_path.exists():
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Указанное имя файла уже используется")
-        try:
-            old_path.rename(new_path)
-        except Exception:
-            db.rollback()
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Не удалось изменить файл")
+# def file_update(db: Session, hash: str, file_info: FilePut, username: str | None = None) -> None:
+#     db_file = file_get_by_hash(db, hash, username)
+#     if db_file is None:
+#         raise HTTPException(status.HTTP_404_NOT_FOUND, "Файл не найден")
+#     if file_info.description is not None:
+#         db_file.description = file_info.description
+#     old_filename = Path(db_file.filename)
+#     if file_info.name != old_filename and file_info.name is not None:
+#         new_filename = old_filename.with_stem(file_info.name)
+#         db_file.filename = str(new_filename)
+#         dir_path = file_get_dir_path(ROOT, db_file.hash)
+#         old_path = dir_path / old_filename
+#         new_path = dir_path / new_filename
+#         if new_path.exists():
+#             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Указанное имя файла уже используется")
+#         try:
+#             old_path.rename(new_path)
+#         except Exception:
+#             db.rollback()
+#             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Не удалось изменить файл")
 
 
-def file_delete(db: Session, hash: str, username: str | None = None):
-    db_file = file_get_by_hash(db, hash, username)
+def file_delete(db: Session, id: int, username: str | None = None):
+    db_file = file_get_by_id(db, id, username)
     if db_file is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Файл не найден")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "File not found")
     db.delete(db_file)
     try:
-        os.remove(file_get_dir_path(ROOT, db_file.hash) / db_file.filename)
+        os.remove(ROOT / db_file_get_uri(db_file))
     except Exception:
         db.rollback()
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Не удалось удалить файл")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Failed to delete file")
 
 
 # #############################################################################################
 
 
 @router.post("/", response_model=Response)
-def upload_file(uploaded_file: UploadFile, group: UUID | None = None, user: User = Depends(get_user), db: Session = Depends(get_db)):
-    file_upload(db, uploaded_file, group, user)
-    return response(None, "Файл загружен")
+def upload_file(
+        uploaded_file: UploadFile,
+        bg_tasks: BackgroundTasks,
+        user: User = Depends(get_user),
+        db: Session = Depends(get_db),
+    ):
+    file_upload(db, uploaded_file, bg_tasks, user)
+    return response(None, "File uploaded")
 
+
+@router.get("/private", response_model=wrapper(List[File]))
+def get_all_private_files(
+    num: int = Query(default=12, ge=1, le=100),
+    page: int = Query(default=1, ge=1),
+    all: bool = Query(default=False),
+    user: User = Depends(get_user),
+    db: Session = Depends(get_db)
+):
+    files: List[models.File] = files_get_all_private_query(
+        db,
+        user.username,
+        num=num,
+        page=page,
+        all=all
+    ).all()
+    return response([convert(db_file) for db_file in files])
 
 
 @router.get("/", response_model=wrapper(List[File]))
-def get_all_files(
-    num: int = Query(default=10, ge=1, le=100),
+def get_all_public_files(
+    num: int = Query(default=12, ge=1, le=100),
     page: int = Query(default=1, ge=1),
+    username: str | None = Query(default=None, max_length=100),
     name: str | None = Query(default=None, max_length=100),
     type: FileType | None = None,
     order_column: OrderColumns = OrderColumns.upload_time,
@@ -341,9 +419,9 @@ def get_all_files(
     user: User = Depends(get_user),
     db: Session = Depends(get_db)
 ):
-    files: List[models.File] = files_get_all_query(
+    files: List[models.File] = files_get_all_public_query(
         db,
-        user.username,
+        username,
         num=num,
         page=page,
         name=name,
@@ -358,15 +436,15 @@ def get_all_files(
     return response([convert(db_file) for db_file in files])
 
 
-@router.put("/{hash}", response_model=Response)
-def change_file(file_info: FilePut, hash: str = QueryPath(min_length=32, max_length=32), user: User = Depends(get_user), db: Session = Depends(get_db)):
-    file_update(db, hash, file_info, user.username)
-    db.commit()
-    return response(None, "Файл изменен")
+# @router.put("/{hash}", response_model=Response)
+# def change_file(file_info: FilePut, hash: str = QueryPath(min_length=32, max_length=32), user: User = Depends(get_user), db: Session = Depends(get_db)):
+#     file_update(db, hash, file_info, user.username)
+#     db.commit()
+#     return response(None, "Файл изменен")
 
 
-@router.delete("/{hash}", response_model=Response)
-def delete_file(hash: str = QueryPath(min_length=32, max_length=32), user: User = Depends(get_user), db: Session = Depends(get_db)):
-    file_delete(db, hash, user.username)
+@router.delete("/{id}", response_model=Response)
+def delete_file(id: int, user: User = Depends(get_user), db: Session = Depends(get_db)):
+    file_delete(db, id, user.username)
     db.commit()
-    return response(None, "Файл удален")
+    return response(None, "File deleted")

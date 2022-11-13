@@ -8,6 +8,8 @@ services:
     restart: always
     volumes:
       - ./frontend/src:/app/src
+    depends_on:
+      - nginx
     ports:
       - "2222:5173"
     environment:
