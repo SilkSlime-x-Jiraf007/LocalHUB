@@ -1,5 +1,5 @@
 <template>
-    <n-card :title="file.name" :style="{backgroundColor: file.state == 'error' ? '#1c0000' : 'inherit'}">
+    <n-card :title="file.name" :style="{backgroundColor: file.state == 'error' ? '#1c0000' : 'inherit', borderColor: file.state == 'error' ? '#e88080' : 'inherit'}">
         <template #cover>
             <div style="background-color: rgba(0, 0, 0, 0.3);">
                 <div v-if="file.state == 'private'">
@@ -83,7 +83,7 @@ const handleSelect = (key) => {
     height: 180px;
     display: flex;
     justify-content: center;
-    align-items: center
+    align-items: center;
 }
 
 .param {
@@ -94,5 +94,6 @@ const handleSelect = (key) => {
 
 .test {
     background-color: #1c0000;
+    border-color: #e88080;
 }
 </style>

@@ -16,23 +16,33 @@
         </n-p>
       </n-upload-dragger>
     </n-upload>
+    <n-space style="align-self: center;">
+      <n-button>Select All</n-button>
+      <n-button>Select All</n-button>
+    </n-space>
+
     <n-grid :x-gap="12" :y-gap="8" cols="1 700:2 1050:3 1400:4 2100:6">
       <n-grid-item v-for="file in privateFilesList">
         <FileCard :file="file" :checked="checkedFiles.includes(file.id)" @check="handleCheck" />
       </n-grid-item>
     </n-grid>
+    <n-pagination v-model:page="page" v-model:page-size="pageSize" :page-count="100" show-size-picker
+      :page-sizes="[10, 20, 30, 40]" />
   </n-space>
 </template>
   
 <script setup>
 import { ref } from 'vue';
 import {
-  FileUploadRound
+  FileUploadRound,
+  ConstructionRound
 } from "@vicons/material";
 import { uploadFile, getPrivateFiles } from '@/utils/api'
 import { apiWrapper } from '@/utils/apiWrapper'
 import FileCard from '@/components/FileCard.vue'
 
+const page = ref(2)
+const pageSize = ref(20)
 
 const apiw = apiWrapper()
 
@@ -89,7 +99,7 @@ const privateFilesList = ref([
     "state": "private",
     "message": ""
   },
-  
+
   {
     "id": 5,
     "uri": "user/SilkSlime/wrong.jpg",
