@@ -1,5 +1,5 @@
 <template>
-    <n-card :title="file.name" :style="{backgroundColor: file.state == 'error' ? '#1c0000' : 'inherit', borderColor: file.state == 'error' ? '#e88080' : 'inherit'}">
+    <n-card :title="file.name" :class="{error: file.state == 'error', checked: checked}">
         <template #cover>
             <div style="background-color: rgba(0, 0, 0, 0.3);">
                 <div v-if="file.state == 'private'">
@@ -27,22 +27,6 @@
             </div>
             <div class="param">
                 <n-checkbox :checked="checked" @update:checked="$emit('check', file.id)"/>
-                <!-- <n-dropdown v-if="file.state == 'private'" trigger="hover" :options="options" @select="handleSelect">
-                    <n-button text>
-                        <template #icon>
-                            <n-icon>
-                                <MoreVertRound />
-                            </n-icon>
-                        </template>
-                    </n-button>
-                </n-dropdown> -->
-                <!-- <n-button text type="error">
-                    <template #icon>
-                        <n-icon>
-                            <DeleteForeverRound />
-                        </n-icon>
-                    </template>
-                </n-button> -->
             </div>
         </template>
         {{ file.description }}
@@ -53,29 +37,13 @@ import { NIcon } from "naive-ui";
 import {
     AutoStoriesRound,
     InsertDriveFileRound,
-    MoreVertRound,
     ErrorOutlineRound,
-    DeleteForeverRound
 } from "@vicons/material";
-const props = defineProps({
+
+const {file, checked} = defineProps({
     file: {},
     checked: {},
 })
-
-const options = [
-    {
-        label: "Publish",
-        key: "publish",
-    },
-    {
-        label: "Delete",
-        key: "delete"
-    },
-]
-
-const handleSelect = (key) => {
-    alert(key);
-}
 </script>
 <style scoped>
 .cover-icon {
@@ -95,5 +63,14 @@ const handleSelect = (key) => {
 .test {
     background-color: #1c0000;
     border-color: #e88080;
+}
+
+.error {
+    background-color: #1b0a0a;
+    border-color: #e88080;
+}
+
+.checked {
+    border-color: #63e2b7;
 }
 </style>

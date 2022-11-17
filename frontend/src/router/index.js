@@ -4,6 +4,8 @@ import { useUserStore } from '@/stores/user'
 import FeedListView from '@/views/FeedListView.vue'
 import SignInView from '@/views/SignInView.vue'
 import UploadView from '@/views/UploadView.vue'
+import PrivateFilesView from '@/views/PrivateFilesView.vue'
+import TagsListView from '@/views/TagsListView.vue'
 
 import ProfileView from '@/views/ProfileViews/ProfileView.vue'
 import ProfileSettingsView from '@/views/ProfileViews/ProfileSettingsView.vue'
@@ -35,6 +37,16 @@ const router = createRouter({
       path: '/upload',
       name: 'Upload',
       component: UploadView,
+    },
+    {
+      path: '/private',
+      name: 'Private',
+      component: PrivateFilesView,
+    },
+    {
+      path: '/tags',
+      name: 'Tags',
+      component: TagsListView
     },
 
     // Profile

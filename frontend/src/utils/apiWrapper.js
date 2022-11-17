@@ -36,7 +36,10 @@ export function apiWrapper() {
             if (errorCallback) errorCallback(content)
             // TODO
             // ROUTER THINGS
-            // if (message == "")
+            if (message == "There is no session with this refresh token") {
+                localStorage.clear()
+                router.push({name: "Sign In"})
+            }
         }
     }
     return { wrap }

@@ -19,7 +19,9 @@ import {
     VideoLibraryRound,
     LibraryBooksRound,
     TranslateRound,
-    FileUploadRound
+    FileUploadRound,
+    SellRound,
+    LockRound
 } from "@vicons/material";
 
 import { breakpointsTailwind, useBreakpoints } from '@vueuse/core'
@@ -47,6 +49,7 @@ const routerOptions = [
         name: "Feed",
         icon: RssFeedRound
     },
+    null,
     {
         display: "Images",
         name: "Images",
@@ -69,9 +72,20 @@ const routerOptions = [
     },
     null,
     {
+        display: "Tags",
+        name: "Tags",
+        icon: SellRound
+    },
+    null,
+    {
         display: "Upload",
         name: "Upload",
         icon: FileUploadRound
+    },
+    {
+        display: "Private",
+        name: "Private",
+        icon: LockRound
     },
 ]
 

@@ -26,7 +26,6 @@ instance.interceptors.response.use(function (response) {
         message: null,
     }
 }, async function (error) {
-    alert(JSON.stringify(error))
     if (error.response.status == 401 && error.response?.data?.detail == 'The access token has expired' && !error.config._retry) {
         error.config._retry = true;
         const { content, message } = await instance.post("/auth/refresh", null, { headers: { Authorization: `Bearer ${localStorage.getItem("refresh_token")}` } })
