@@ -87,7 +87,7 @@ def get_user(db: Session = Depends(get_db), access_token: str = Depends(oauth2_s
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "The access token has expired", {
                             "WWW-Authenticate": "Bearer"})
     except JWTError:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bad access token", {
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Bad access token", {
                             "WWW-Authenticate": "Bearer"})
     db_user = db.query(models.User).filter(models.User.username == username).first()
     return User(sid=sid, username=db_user.username, role=db_user.role)
