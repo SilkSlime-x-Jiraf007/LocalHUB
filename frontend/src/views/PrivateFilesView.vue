@@ -1,12 +1,21 @@
 <template>
   <n-space vertical>
-    <n-space>
-      <n-button @click="checkAll">Check All</n-button>
-      <n-button @click="clearAll">Clear All</n-button>
-      <div>
-        <n-select v-model:value="filesTags" multiple filterable tag :options="options" max-tag-count="responsive" />
+
+
+    <div class="flex-wrap">
+      <div class="flex" style="flex-grow: 1">
+        <n-button @click="checkAll" style="flex-grow: 1">Check All</n-button>
+        <n-button @click="clearAll" style="flex-grow: 1">Clear All</n-button>
       </div>
-    </n-space>
+      <div style="flex-grow: 999; min-width: 200px;">
+        <n-select :disabled="checkedFiles.length == 0" v-model:value="filesTags" multiple filterable tag
+          :options="options" max-tag-count="responsive" />
+      </div>
+      <div class="flex" style="flex-grow: 1">
+        <n-button type="error" style="flex-grow: 1">Delete</n-button>
+        <n-button type="primary" style="flex-grow: 1">Publish</n-button>
+      </div>
+    </div>
 
 
     <n-grid :x-gap="12" :y-gap="8" cols="1 700:2 1050:3 1400:4 2100:6">
@@ -17,8 +26,7 @@
 
 
     <div style="display: flex; justify-content: center;">
-      <n-pagination v-model:page="page" v-model:page-size="pageSize" :page-count="100" show-size-picker
-        :page-sizes="[10, 20, 30, 40]" />
+      <n-pagination v-model:page="page" :page-count="100" :page-slot="7"/>
     </div>
 
 
@@ -27,18 +35,15 @@
   
 <script setup>
 import { ref } from 'vue';
-import {
-  FileUploadRound,
-  ConstructionRound
-} from "@vicons/material";
-import { uploadFile, getPrivateFiles } from '@/utils/api'
+import { getPrivateFiles } from '@/utils/api'
 import { apiWrapper } from '@/utils/apiWrapper'
 import FileCard from '@/components/FileCard.vue'
 
-const page = ref(2)
-const pageSize = ref(20)
+const page = ref(1)
+const pageSize = ref(50)
 
 const apiw = apiWrapper()
+
 
 const privateFilesList = ref([
   {
@@ -121,6 +126,39 @@ const privateFilesList = ref([
     "message": "Any message with error"
   },
 ])
+const wGetPrivateFiles = () => {
+  apiw.wrap(() => getPrivateFiles(), (content) => { privateFilesList.value = content })
+}
+wGetPrivateFiles()
+setInterval(wGetPrivateFiles, 1000);
+
+
+
+// const wDeletePrivateFile = () => {
+//   apiw.wrap(() => getPrivateFiles(), (content) => {
+//     privateFilesList.value = content
+//     wGetPrivateFiles()
+//   })
+// }
+
+
+
+const checkedFiles = ref([])
+const handleCheck = (id) => {
+  if (checkedFiles.value.includes(id)) {
+    checkedFiles.value = checkedFiles.value.filter(x => x != id)
+  } else {
+    checkedFiles.value.push(id)
+  }
+}
+const checkAll = () => {
+  checkedFiles.value = privateFilesList.value.map(({ id }) => id)
+}
+const clearAll = () => {
+  checkedFiles.value = []
+}
+
+
 
 const filesTags = ref([])
 const options = [
@@ -159,31 +197,16 @@ const options = [
     ]
   }
 ];
-
-
-const checkedFiles = ref([])
-const handleCheck = (id) => {
-  if (checkedFiles.value.includes(id)) {
-    checkedFiles.value = checkedFiles.value.filter(x => x != id)
-  } else {
-    checkedFiles.value.push(id)
-  }
-}
-
-const checkAll = () => {
-  checkedFiles.value = privateFilesList.value.map(({ id }) => id)
-}
-const clearAll = () => {
-  checkedFiles.value = []
-}
-
-const wGetPrivateFiles = () => {
-  apiw.wrap(() => getPrivateFiles(), (content) => { privateFilesList.value = content })
-}
-// wGetPrivateFiles()
-// setInterval(wGetPrivateFiles, 1000);
-
 </script>
 <style scoped>
+.flex-wrap {
+  display: flex;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+}
 
+.flex {
+  display: flex;
+  gap: 8px 12px;
+}
 </style>
