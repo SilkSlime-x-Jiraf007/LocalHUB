@@ -56,7 +56,7 @@
           </div>
           <div style="flex-grow: 999; min-width: 200px;">
             <n-select :disabled="selectedFiles.length == 0" v-model:value="filesTags" multiple filterable tag
-              :options="options" max-tag-count="responsive" />
+              :options="options" max-tag-count="responsive" placeholder="Intersecting Tags" />
           </div>
           <div class="flex" style="flex-grow: 1">
             <n-button :disabled="selectedFiles.length == 0" @click="deleteFiles(selectedFiles)" type="error"
@@ -66,7 +66,7 @@
         </div>
         <n-grid :x-gap="12" :y-gap="8" cols="1 700:2 1050:3 1400:4 2100:6">
           <n-grid-item v-for="file in readyFilesList.slice((page - 1) * pageSize, page * pageSize)" :key="file.id">
-            <FileCard :file="file" :selected="selectedFiles.includes(file.id)" @select="handleSelect" />
+            <FileCard @tagsupdate="updateTags" @like="handleLike" :file="file" :selected="selectedFiles.includes(file.id)" @select="handleSelect" />
           </n-grid-item>
         </n-grid>
         <div v-if="readyFilesList.length > pageSize" style="display: flex; justify-content: center;">
@@ -96,15 +96,16 @@ import FileCardError from '@/components/FileCardError.vue'
 import FileCardProcessing from '@/components/FileCardProcessing.vue'
 import { renderTextBadge } from '@/utils/textBadge'
 
+
 const apiw = apiWrapper()
 
 
+// Uploading
 const uploadingFileList = ref([]);
 const handleUploadChange = (data) => {
   uploadingFileList.value = data.fileList;
-  // setTimeout(()=>{uploadingFileList.value = uploadingFileList.value.filter(x => x.id != data.file.id);}, 2000)
-  // console.log(data)
 }
+
 const wUploadFile = ({
   file,
   onFinish,
@@ -115,11 +116,27 @@ const wUploadFile = ({
 };
 
 
-
+// Pages
 const page = ref(1)
 const pageSize = 12
 
-const filesList = ref([])
+
+// FileList
+const filesList = ref([
+  {
+    "id": 495,
+    "uri": "data/user/SilkSlime/IMG_7268.JPG",
+    "owner": "SilkSlime",
+    "description": "",
+    "upload_time": "2022-11-18T23:45:35.712634+03:00",
+    "size": "677.13 KB",
+    "name": "IMG_7268",
+    "type": "Image",
+    "state": "private",
+    "tags": ["Настя", "Балда", "Настя", "Балда", "Настя", "Балда", "Настя", "Балда", "Настя", "Балда"]
+  },
+]
+)
 const processingFilesList = computed(() => {
   return filesList.value.filter(x => x.state == 'processing')
 })
@@ -130,17 +147,18 @@ const readyFilesList = computed(() => {
   return filesList.value.filter(x => x.state == 'private')
 })
 watch(readyFilesList, async (n, o) => {
-  let maxPage = Math.ceil(n.length/pageSize)
+  let maxPage = Math.ceil(n.length / pageSize)
   if (page.value > maxPage)
     page.value = maxPage
 })
 const wGetPrivateFiles = () => {
   apiw.wrap(() => getPrivateFiles(), (content) => { filesList.value = content })
 }
-wGetPrivateFiles()
-setInterval(wGetPrivateFiles, 2000);
+// wGetPrivateFiles()
+// setInterval(wGetPrivateFiles, 2000);
 
 
+// Selecting
 const selectedFiles = ref([])
 const handleSelect = (id) => {
   if (selectedFiles.value.includes(id)) {
@@ -157,11 +175,9 @@ const clearAll = () => {
 }
 
 
-
+// Deleting
 const wDeleteFile = (id) => {
-  apiw.wrap(() => deleteFile(id), (content) => {
-    wGetPrivateFiles()
-  })
+  apiw.wrap(() => deleteFile(id))
 }
 
 const deleteFiles = (ids) => {
@@ -171,44 +187,10 @@ const deleteFiles = (ids) => {
   }
 }
 
-
-const filesTags = ref([])
-const options = [
-  {
-    type: "group",
-    label: "Common",
-    key: "Common",
-    children: [
-      {
-        label: "Soft",
-        value: "Soft",
-      },
-      {
-        label: "Test",
-        value: "Test"
-      }
-    ]
-  },
-  {
-    type: "group",
-    label: "Artist",
-    key: "Artist",
-    children: [
-      {
-        label: "JLullaby (39)",
-        value: "JLullaby"
-      },
-      {
-        label: "ikemeru19",
-        value: "ikemeru19"
-      },
-      {
-        label: "Aroma Sensei",
-        value: "Aroma Sensei"
-      },
-    ]
-  }
-];
+// Like
+const handleLike = (id) => {
+  alert(`Liked ${id}`)
+}
 </script>
 <style scoped>
 :deep(.n-upload-file--success-status span) {
