@@ -18,6 +18,7 @@ export function apiWrapper() {
                 type: type === "loading" ? "default" : type,
                 style: {
                     boxShadow: "var(--n-box-shadow)",
+                    maxWidth: "80vw"
                 }
             },
             {

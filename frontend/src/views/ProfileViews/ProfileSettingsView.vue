@@ -1,7 +1,7 @@
 <template>
   <n-card>
     <n-tabs type="line" animated>
-      <n-tab-pane name="sessions" :tab="`Sessions (${sessionData.length})`">
+      <n-tab-pane name="sessions" :tab="renderTextBadge('Sessions', sessionData.length)">
         <!-- <n-button @click="getSessions">Refresh</n-button> -->
         <SessionsTable :sessionData="sessionData" @terminate="wTerminateUserSession" />
       </n-tab-pane>
@@ -22,6 +22,7 @@ import { useMessage } from 'naive-ui'
 import SessionsTable from '@/components/SessionsTable.vue'
 import { getUserSessions, terminateUserSession } from '@/utils/api'
 import { apiWrapper } from '@/utils/apiWrapper.js'
+import { renderTextBadge } from '@/utils/textBadge'
 
 
 const sessionData = ref([])

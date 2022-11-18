@@ -1,10 +1,7 @@
 <template>
-
-  <n-tabs type="line" animated>
-
-
-    <n-tab-pane name="Upload" tab="Upload">
-      <n-upload multiple :custom-request="wUploadFile">
+  <n-tabs type="bar" animated>
+    <n-tab-pane display-directive="show:lazy" name="Upload" :tab="renderTextBadge('Upload', uploadingFileList.length)">
+      <n-upload multiple :custom-request="wUploadFile" :file-list="uploadingFileList" @change="handleUploadChange">
         <n-upload-dragger>
           <div style="margin-bottom: 12px">
             <n-icon size="48" :depth="3">
@@ -22,10 +19,11 @@
     </n-tab-pane>
 
 
-    <n-tab-pane  name="Processing" :tab="`Processing (${processingFilesList.length})`">
+    <n-tab-pane display-directive="show:lazy" name="Processing"
+      :tab="renderTextBadge('Processing', processingFilesList.length)">
       <n-grid v-if="processingFilesList.length" :x-gap="12" :y-gap="8" cols="1 700:2 1050:3 1400:4 2100:6">
-        <n-grid-item v-for="file in processingFilesList">
-          <FileCard :file="file" :selected="selectedFiles.includes(file.id)" @select="handleSelect" />
+        <n-grid-item v-for="file in processingFilesList" :key="file.id">
+          <FileCardProcessing :file="file" :selected="selectedFiles.includes(file.id)" @select="handleSelect" />
         </n-grid-item>
       </n-grid>
       <div v-else>
@@ -34,11 +32,11 @@
     </n-tab-pane>
 
 
-    <n-tab-pane name="Error" :tab="`Error (${errorFilesList.length})`">
+    <n-tab-pane display-directive="show:lazy" name="Error" :tab="renderTextBadge('Error', errorFilesList.length)">
       <n-space v-if="errorFilesList.length" vertical>
         <n-button @click="deleteFiles(errorFilesList.map(x => x.id))" type="error">Delete All</n-button>
         <n-grid :x-gap="12" :y-gap="8" cols="1 700:2 1050:3 1400:4 2100:6">
-          <n-grid-item v-for="file in errorFilesList">
+          <n-grid-item v-for="file in errorFilesList" :key="file.id">
             <FileCardError :file="file" @delete="wDeleteFile(file.id)" />
           </n-grid-item>
         </n-grid>
@@ -49,7 +47,7 @@
     </n-tab-pane>
 
 
-    <n-tab-pane name="Ready" :tab="`Ready (${readyFilesList.length})`">
+    <n-tab-pane display-directive="show:lazy" name="Ready" :tab="renderTextBadge('Ready', readyFilesList.length)">
       <n-space v-if="readyFilesList.length" vertical>
         <div class="flex-wrap">
           <div class="flex" style="flex-grow: 1">
@@ -61,12 +59,13 @@
               :options="options" max-tag-count="responsive" />
           </div>
           <div class="flex" style="flex-grow: 1">
-            <n-button :disabled="selectedFiles.length == 0" @click="deleteFiles(selectedFiles)" type="error" style="flex-grow: 1">Delete</n-button>
+            <n-button :disabled="selectedFiles.length == 0" @click="deleteFiles(selectedFiles)" type="error"
+              style="flex-grow: 1">Delete</n-button>
             <n-button :disabled="selectedFiles.length == 0" type="primary" style="flex-grow: 1">Publish</n-button>
           </div>
         </div>
         <n-grid :x-gap="12" :y-gap="8" cols="1 700:2 1050:3 1400:4 2100:6">
-          <n-grid-item v-for="file in readyFilesList.slice((page-1)*pageSize, page*pageSize)">
+          <n-grid-item v-for="file in readyFilesList.slice((page - 1) * pageSize, page * pageSize)" :key="file.id">
             <FileCard :file="file" :selected="selectedFiles.includes(file.id)" @select="handleSelect" />
           </n-grid-item>
         </n-grid>
@@ -94,17 +93,25 @@ import { getPrivateFiles, deleteFile } from '@/utils/api'
 import { apiWrapper } from '@/utils/apiWrapper'
 import FileCard from '@/components/FileCard.vue'
 import FileCardError from '@/components/FileCardError.vue'
-
+import FileCardProcessing from '@/components/FileCardProcessing.vue'
+import { renderTextBadge } from '@/utils/textBadge'
 
 const apiw = apiWrapper()
 
+
+const uploadingFileList = ref([]);
+const handleUploadChange = (data) => {
+  uploadingFileList.value = data.fileList;
+  // setTimeout(()=>{uploadingFileList.value = uploadingFileList.value.filter(x => x.id != data.file.id);}, 2000)
+  // console.log(data)
+}
 const wUploadFile = ({
   file,
   onFinish,
   onError,
   onProgress
 }) => {
-  apiw.wrap(() => uploadFile(file.file, onProgress), ()=>{onFinish()}, ()=>{onError()})
+  apiw.wrap(() => uploadFile(file.file, onProgress), () => { onFinish() }, () => { onError() })
 };
 
 
@@ -121,6 +128,11 @@ const errorFilesList = computed(() => {
 })
 const readyFilesList = computed(() => {
   return filesList.value.filter(x => x.state == 'private')
+})
+watch(readyFilesList, async (n, o) => {
+  let maxPage = Math.ceil(n.length/pageSize)
+  if (page.value > maxPage)
+    page.value = maxPage
 })
 const wGetPrivateFiles = () => {
   apiw.wrap(() => getPrivateFiles(), (content) => { filesList.value = content })

@@ -1,6 +1,6 @@
 <template>
     <n-config-provider :theme="darkTheme">
-        <n-message-provider placement='bottom-right'>
+        <n-message-provider placement='bottom-right' :max="5">
             <n-dialog-provider>
                 <App />
             </n-dialog-provider>
