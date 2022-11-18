@@ -154,6 +154,7 @@ const wDeleteFile = (id) => {
 
 const deleteFiles = (ids) => {
   for (let id of ids) {
+    handleSelect(id)
     wDeleteFile(id)
   }
 }
