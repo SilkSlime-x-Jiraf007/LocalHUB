@@ -171,7 +171,7 @@ def convert(db_file: models.File) -> File:
         description=db_file.description,
         upload_time=db_file.upload_time,
         size=get_human_size(int(db_file.size)),
-        uri=str(db_file_get_uri(db_file)),
+        uri=str(Path('data') / db_file_get_uri(db_file)),
         name=str(Path(db_file.filename).stem),
         type=db_file.type,
         group=db_file.group_id,
@@ -195,16 +195,12 @@ def files_get_same_names(db: Session, filename: Path) -> List[str]:
 def files_get_all_private_query(
     db: Session,
     username: str | None = None,
-    num: int = 10,
-    page: int = 1,
     all: bool = False,
 ) -> SqlQuery:
     db_files = db.query(models.File).filter(models.File.state != "public")
     if username:
         db_files = db_files.filter(models.File.owner == username)
-    db_files = db_files.order_by(models.File.upload_time.desc())
-    if not all:
-        return db_files.offset((page-1)*num).limit(num)
+    db_files = db_files.order_by(models.File.state.asc(), models.File.upload_time.desc())
     return db_files
 
 
@@ -359,17 +355,16 @@ def file_upload(
 #             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Не удалось изменить файл")
 
 
-def file_delete(db: Session, id: int, username: str | None = None):
-    db_file = file_get_by_id(db, id, username)
+def file_delete(db: Session, id: int, username: str | None = None) -> None:
+    db_file = file_get_by_id(db, id)
     if db_file is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "File not found")
+    if username is not None and db_file.owner != username:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "You are not the owner")
+    path = ROOT / db_file_get_uri(db_file)
+    if path.exists():
+        os.remove(path)
     db.delete(db_file)
-    try:
-        os.remove(ROOT / db_file_get_uri(db_file))
-    except Exception:
-        db.rollback()
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Failed to delete file")
-
 
 # #############################################################################################
 
@@ -387,19 +382,10 @@ def upload_file(
 
 @router.get("/private", response_model=wrapper(List[File]))
 def get_all_private_files(
-    num: int = Query(default=12, ge=1, le=100),
-    page: int = Query(default=1, ge=1),
-    all: bool = Query(default=False),
     user: User = Depends(get_user),
     db: Session = Depends(get_db)
 ):
-    files: List[models.File] = files_get_all_private_query(
-        db,
-        user.username,
-        num=num,
-        page=page,
-        all=all
-    ).all()
+    files: List[models.File] = files_get_all_private_query(db, user.username).all()
     return response([convert(db_file) for db_file in files])
 
 

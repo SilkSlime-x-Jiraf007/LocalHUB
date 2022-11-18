@@ -26,13 +26,14 @@ export function apiWrapper() {
         );
     };
 
-    const wrap = async (apiCall, callback = null, errorCallback = null) => {
+    const wrap = async (apiCall, callback = null, errorCallback = null, silent=false) => {
+        // TODO
         try {
             const { content, message } = await apiCall();
-            if (message) messager.success(message, {render: renderMessage})
+            if (message && !silent) messager.success(message, {render: renderMessage})
             if (callback) callback(content)
         } catch ({ content, message }) {
-            if (message) messager.error(message, {render: renderMessage})
+            if (message && !silent) messager.error(message, {render: renderMessage})
             if (errorCallback) errorCallback(content)
             // TODO
             // ROUTER THINGS

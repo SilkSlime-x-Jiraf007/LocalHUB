@@ -82,11 +82,6 @@ const routerOptions = [
         name: "Upload",
         icon: FileUploadRound
     },
-    {
-        display: "Private",
-        name: "Private",
-        icon: LockRound
-    },
 ]
 
 const makeMenuOptions = (routerOptions) => {

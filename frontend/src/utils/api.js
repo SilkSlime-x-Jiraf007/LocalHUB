@@ -69,3 +69,7 @@ export const uploadFile = (file, onProgress) => {
 export const getPrivateFiles = () => {
     return instance.get('/files/private')
 }
+
+export const deleteFile = (id) => {
+    return instance.delete(`/files/${id}`)
+}
