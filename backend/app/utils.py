@@ -1,5 +1,5 @@
 import hashlib
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, Dict
 from pathlib import Path
 from pydantic import BaseModel, create_model
 import random
@@ -13,6 +13,11 @@ def get_random_string(k=20):
     return ''.join(random.choices(string.ascii_uppercase, k=k))
 
 def wrapper(type, name: str | None = None) -> BaseModel:
+    if name is None:
+        name = get_random_string()
+    return create_model(name, content=(type, ...), __base__=Response)
+
+def wrapper_paged(type, name: str | None = None) -> BaseModel:
     if name is None:
         name = get_random_string()
     return create_model(name, content=(type, ...), __base__=Response)

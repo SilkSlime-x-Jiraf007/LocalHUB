@@ -65,6 +65,12 @@ class FileType(enum.Enum):
     MANGA = 'Manga'
     OTHER = 'Other'
 
+class FileState(enum.Enum):
+    PROCESSING = 'processing'
+    ERROR = 'error'
+    PRIVATE = 'private'
+    PUBLIC = 'public'
+
 class FileData(BaseModel):
     type: FileType
     size: str
@@ -242,6 +248,54 @@ def files_get_all_public_query(
         return db_files.order_by(order_rule).offset((page-1)*num).limit(num)
     return db_files
 
+def files_get_query(
+    db: Session,
+    username: str | None = None,
+
+    state: FileState = FileState.PUBLIC,
+
+    name: str | None = None,
+    type: FileType | None = None,
+
+    order_column: OrderColumns = OrderColumns.upload_time,
+    order_type: OrderType = OrderType.desc,
+
+    include: List[str] | None = None,
+    ban: List[str] | None = None,
+    strict: bool = True,
+
+    select_list: list = [models.File]
+) -> SqlQuery:
+    db_files = db.query(*select_list)
+
+
+    db_files = db.query(models.File).filter(models.File.state == state.value)
+
+
+    if username:
+        db_files = db_files.filter(models.File.owner == username)
+    if name:
+        db_files = db_files.filter(models.File.filename.ilike(f'%{name}%'))
+    if type:
+        db_files = db_files.filter(models.File.type == type.value)
+
+    # if include:
+    #     sub_include = db.query(models.FilesTags.file_hash).filter(models.FilesTags.tag_id.in_(include)).group_by(models.FilesTags.file_hash)
+    #     if strict:
+    #         sub_include = sub_include.having(func.count(models.FilesTags.tag_id) == len(include))
+    #     db_files = db_files.filter(models.File.hash.in_(sub_include))
+    # if ban:
+    #     sub_ban = db.query(models.FilesTags.file_hash).filter(models.FilesTags.tag_id.in_(ban)).group_by(models.FilesTags.file_hash)
+    #     db_files = db_files.filter(models.File.hash.notin_(sub_ban))
+    column = getattr(models.File, order_column.value)
+    order_rule = column.asc() if order_type == OrderType.asc else column.desc()
+    db_files = db_files.order_by(order_rule)
+    return db_files
+
+
+def query_pages(query: SqlQuery, page=1, size=12) -> SqlQuery:
+    return query.offset((page-1)*size).limit(size)
+
 
 def file_calculate_params(db: Session, file):
     path = ROOT / db_file_get_uri(file)
@@ -380,46 +434,78 @@ def upload_file(
     return response(None, "File uploaded")
 
 
-@router.get("/private", response_model=wrapper(List[File]))
+@router.get("/private", response_model=None)
 def get_all_private_files(
-    user: User = Depends(get_user),
-    db: Session = Depends(get_db)
-):
-    files: List[models.File] = files_get_all_private_query(db, user.username).all()
-    return response([convert(db_file) for db_file in files])
-
-
-@router.get("/", response_model=wrapper(List[File]))
-def get_all_public_files(
-    num: int = Query(default=12, ge=1, le=100),
     page: int = Query(default=1, ge=1),
-    username: str | None = Query(default=None, max_length=100),
-    name: str | None = Query(default=None, max_length=100),
-    type: FileType | None = None,
-    order_column: OrderColumns = OrderColumns.upload_time,
-    order_type: OrderType = OrderType.desc,
-    iti: List[int] = Query(default=list()),
-    bti: List[int] = Query(default=list()),
-    strict: bool = Query(default=True),
+    size: int = Query(default=12, ge=1),
     all: bool = Query(default=False),
     user: User = Depends(get_user),
     db: Session = Depends(get_db)
 ):
-    files: List[models.File] = files_get_all_public_query(
-        db,
-        username,
-        num=num,
-        page=page,
+    files_query = files_get_query(db=db, username=user.username, private=True)
+    total: int = files_query.count()
+    if not all:
+        files_query = query_pages(files_query, page, size)
+    files_list: List[models.File] = files_query.all()
+    return response({
+        "items": {db_file.id:convert(db_file) for db_file in files_list},
+        "total": total
+    })
+
+
+@router.get("/", response_model=None)
+def get_files(
+    page: int = Query(default=1, ge=1),
+    size: int = Query(default=12, ge=1),
+    all: bool = Query(default=False),
+
+    owner: str | None = Query(default=None, max_length=100),
+    name: str | None = Query(default=None, max_length=100),
+    type: FileType | None = None,
+    state: FileState = FileState.PUBLIC,
+
+    order_column: OrderColumns = OrderColumns.upload_time,
+    order_type: OrderType = OrderType.desc,
+
+    iti: List[int] = Query(default=list()),
+    bti: List[int] = Query(default=list()),
+    strict: bool = Query(default=True),
+
+    user: User = Depends(get_user),
+    db: Session = Depends(get_db)
+):
+    if state == FileState.PUBLIC:
+        if owner:
+            _username = owner
+        else:
+            _username = None
+    else:
+        _username = user.username
+
+    files_query: SqlQuery = files_get_query(
+        db=db,
+        username=_username,
+        state=state,
         name=name,
         type=type,
         order_column=order_column,
         order_type=order_type,
         include=iti,
         ban=bti,
-        strict=strict,
-        all=all
-    ).all()
-    return response([convert(db_file) for db_file in files])
+        strict=strict
+    )
+    total: int = files_query.count()
+    if not all:
+        files_query = query_pages(files_query, page, size)
+    files_list: List[models.File] = files_query.all()
+    return response({
+        "items": [convert(db_file) for db_file in files_list],
+        "total": total
+    })
+    # return response({
+    #     "items": {db_file.id:convert(db_file) for db_file in files_list},
+    #     "total": total
+    # })
 
 
 # @router.put("/{hash}", response_model=Response)
