@@ -9,9 +9,7 @@ CREATE TABLE files (
     upload_time timestamp with time zone NOT NULL,
     size CHARACTER VARYING NOT NULL,
     type filetype NOT NULL DEFAULT 'Other',
-    group_id UUID,
     state filestate NOT NULL DEFAULT 'processing',
-    message CHARACTER VARYING
 );
 CREATE UNIQUE INDEX ON files (hash) WHERE state = 'public';
 

@@ -1,7 +1,6 @@
 from datetime import datetime
 from typing import Dict, List
-from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, Path as QueryPath, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, Query, BackgroundTasks
 from pydantic import BaseModel
 from app.database import get_db
 from sqlalchemy.orm import Session, Query as SqlQuery
@@ -16,8 +15,6 @@ import enum
 import imagehash
 from pymediainfo import MediaInfo, Track
 from bitstring import BitArray
-import time
-import random
 # #############################################################################################
 
 
@@ -29,15 +26,32 @@ router = APIRouter()
 
 ROOT = Path("/data").resolve()
 
+
 class OrderColumns(enum.Enum):
     upload_time = 'upload_time'
     size = 'size'
     filename = 'filename'
     type = 'type'
 
+
 class OrderType(enum.Enum):
     asc = 'asc'
     desc = 'desc'
+
+
+class FileType(enum.Enum):
+    IMAGE = 'Image'
+    VIDEO = 'Video'
+    TEXT = 'Text'
+    MANGA = 'Manga'
+    OTHER = 'Other'
+
+
+class FileState(enum.Enum):
+    PROCESSING = 'processing'
+    ERROR = 'error'
+    PRIVATE = 'private'
+    PUBLIC = 'public'
 
 
 class File(BaseModel):
@@ -49,31 +63,18 @@ class File(BaseModel):
     size: str
     name: str
     type: str
-    group: str | None
     state: str
-    message: str | None
 
 
 class FilePut(BaseModel):
     name: str | None = None
     description: str | None = None
 
-class FileType(enum.Enum):
-    IMAGE = 'Image'
-    VIDEO = 'Video'
-    TEXT = 'Text'
-    MANGA = 'Manga'
-    OTHER = 'Other'
-
-class FileState(enum.Enum):
-    PROCESSING = 'processing'
-    ERROR = 'error'
-    PRIVATE = 'private'
-    PUBLIC = 'public'
 
 class FileData(BaseModel):
     type: FileType
     size: str
+
 
 class ImageData(FileData):
     width: int
@@ -81,20 +82,27 @@ class ImageData(FileData):
     phash: int
     colorhash: int
 
+
 class VideoData(FileData):
     width: int
     height: int
     duration: int
     has_audio: bool
 
+
 class TextData(FileData):
     pass
+
 
 class MangaData(FileData):
     pass
 
-def get_file_data(filepath: Path):
-    tracks: Dict[str, Track] = {track.track_type:track for track in MediaInfo.parse(filepath).tracks}
+# MediaInfo parser
+
+
+def get_file_data(filepath: Path) -> FileData:
+    tracks: Dict[str, Track] = {
+        track.track_type: track for track in MediaInfo.parse(filepath).tracks}
     file_type = FileType.OTHER
     size = str(tracks['General'].file_size)
     if 'Image' in tracks:
@@ -119,7 +127,8 @@ def get_file_data(filepath: Path):
                 width=img.width,
                 height=img.height,
                 phash=BitArray(hex=f"0x{str(imagehash.phash(img))}").int,
-                colorhash=BitArray(hex=f"0x{str(imagehash.colorhash(img))}").int
+                colorhash=BitArray(
+                    hex=f"0x{str(imagehash.colorhash(img))}").int
             )
     elif file_type == FileType.VIDEO:
         return VideoData(
@@ -128,7 +137,7 @@ def get_file_data(filepath: Path):
             width=tracks['Video'].width,
             height=tracks['Video'].height,
             duration=int(round(float(tracks['Video'].duration)))//1000,
-            has_audio= 'Audio' in tracks
+            has_audio='Audio' in tracks
         )
     elif file_type == FileType.TEXT:
         return TextData(
@@ -146,14 +155,13 @@ def get_file_data(filepath: Path):
             size=size,
         )
 
+
 def get_human_size(bytes: int) -> str:
     sizes = ['B', 'KB', 'MB', 'GB', 'TB']
     for i, size in enumerate(sizes):
         current_size = round(bytes/pow(1024, i), 2)
         if current_size < 1024:
             return f'{current_size} {size}'
-
-# #############################################################################################
 
 
 def file_get_dir_path_from_hash(hash: str, split: tuple = (1, 2)) -> Path:
@@ -164,11 +172,13 @@ def file_get_dir_path_from_hash(hash: str, split: tuple = (1, 2)) -> Path:
         i += s
     return path
 
+
 def db_file_get_uri(db_file) -> Path:
     if db_file.state == "public":
         return file_get_dir_path_from_hash(db_file.hash) / db_file.filename
     else:
         return Path("user") / db_file.owner / db_file.filename
+
 
 def convert(db_file: models.File) -> File:
     return File(
@@ -180,129 +190,27 @@ def convert(db_file: models.File) -> File:
         uri=str(Path('data') / db_file_get_uri(db_file)),
         name=str(Path(db_file.filename).stem),
         type=db_file.type,
-        group=db_file.group_id,
         state=db_file.state,
-        message=db_file.message
     )
 
 
-def file_get_by_id(db: Session, id: int, username: str | None = None) -> models.File | None:
-    db_file = db.query(models.File).filter(models.File.id == id)
-    if username:
-        db_file = db_file.filter(models.File.owner == username)
-    return db_file.first()
-
-
 def files_get_same_names(db: Session, filename: Path) -> List[str]:
-    same_files = db.query(models.File).filter(models.File.filename.ilike(f"{filename.stem}%{filename.suffix}")).all()
+    same_files = db.query(models.File).filter(
+        models.File.filename.ilike(f"{filename.stem}%{filename.suffix}")).all()
     return [same_file.filename for same_file in same_files]
-
-
-def files_get_all_private_query(
-    db: Session,
-    username: str | None = None,
-    all: bool = False,
-) -> SqlQuery:
-    db_files = db.query(models.File).filter(models.File.state != "public")
-    if username:
-        db_files = db_files.filter(models.File.owner == username)
-    db_files = db_files.order_by(models.File.state.asc(), models.File.upload_time.desc())
-    return db_files
-
-
-def files_get_all_public_query(
-    db: Session,
-    username: str | None = None,
-    num: int = 10,
-    page: int = 1,
-    name: str | None = None,
-    type: FileType | None = None,
-    order_column: OrderColumns = OrderColumns.upload_time,
-    order_type: OrderType = OrderType.desc,
-    include: List[int] | None = None,
-    ban: List[int] | None = None,
-    strict: bool = True,
-    all: bool = False,
-    select_list: list = [models.File]
-) -> SqlQuery:
-    db_files = db.query(*select_list)
-    db_files = db.query(models.File).filter(models.File.state == "public")
-    if username:
-        db_files = db_files.filter(models.File.owner == username)
-    if name:
-        db_files = db_files.filter(models.File.filename.ilike(f'%{name}%'))
-    if type:
-        db_files = db_files.filter(models.File.type == type.value)
-
-    if include:
-        sub_include = db.query(models.FilesTags.file_hash).filter(models.FilesTags.tag_id.in_(include)).group_by(models.FilesTags.file_hash)
-        if strict:
-            sub_include = sub_include.having(func.count(models.FilesTags.tag_id) == len(include))
-        db_files = db_files.filter(models.File.hash.in_(sub_include))
-    if ban:
-        sub_ban = db.query(models.FilesTags.file_hash).filter(models.FilesTags.tag_id.in_(ban)).group_by(models.FilesTags.file_hash)
-        db_files = db_files.filter(models.File.hash.notin_(sub_ban))
-    column = getattr(models.File, order_column.value)
-    order_rule = column.asc() if order_type == OrderType.asc else column.desc()
-    if not all:
-        return db_files.order_by(order_rule).offset((page-1)*num).limit(num)
-    return db_files
-
-def files_get_query(
-    db: Session,
-    username: str | None = None,
-
-    state: FileState = FileState.PUBLIC,
-
-    name: str | None = None,
-    type: FileType | None = None,
-
-    order_column: OrderColumns = OrderColumns.upload_time,
-    order_type: OrderType = OrderType.desc,
-
-    include: List[str] | None = None,
-    ban: List[str] | None = None,
-    strict: bool = True,
-
-    select_list: list = [models.File]
-) -> SqlQuery:
-    db_files = db.query(*select_list)
-
-
-    db_files = db.query(models.File).filter(models.File.state == state.value)
-
-
-    if username:
-        db_files = db_files.filter(models.File.owner == username)
-    if name:
-        db_files = db_files.filter(models.File.filename.ilike(f'%{name}%'))
-    if type:
-        db_files = db_files.filter(models.File.type == type.value)
-
-    # if include:
-    #     sub_include = db.query(models.FilesTags.file_hash).filter(models.FilesTags.tag_id.in_(include)).group_by(models.FilesTags.file_hash)
-    #     if strict:
-    #         sub_include = sub_include.having(func.count(models.FilesTags.tag_id) == len(include))
-    #     db_files = db_files.filter(models.File.hash.in_(sub_include))
-    # if ban:
-    #     sub_ban = db.query(models.FilesTags.file_hash).filter(models.FilesTags.tag_id.in_(ban)).group_by(models.FilesTags.file_hash)
-    #     db_files = db_files.filter(models.File.hash.notin_(sub_ban))
-    column = getattr(models.File, order_column.value)
-    order_rule = column.asc() if order_type == OrderType.asc else column.desc()
-    db_files = db_files.order_by(order_rule)
-    return db_files
-
 
 def query_pages(query: SqlQuery, page=1, size=12) -> SqlQuery:
     return query.offset((page-1)*size).limit(size)
 
-
+# As Background Task
 def file_calculate_params(db: Session, file):
     path = ROOT / db_file_get_uri(file)
     try:
         hash = md5(path)
-        existed_private_file = db.query(models.File).filter(models.File.hash == hash).filter(models.File.owner == file.owner).filter(models.File.state != "public").first()
-        existed_public_file = db.query(models.File).filter(models.File.hash == hash).filter(models.File.state == "public").first()
+        existed_private_file = db.query(models.File).filter(models.File.hash == hash).filter(
+            models.File.owner == file.owner).filter(models.File.state != "public").first()
+        existed_public_file = db.query(models.File).filter(
+            models.File.hash == hash).filter(models.File.state == "public").first()
         if existed_private_file:
             file.message = f"Collision with your non-public {existed_private_file.filename}"
             file.state = "error"
@@ -315,12 +223,12 @@ def file_calculate_params(db: Session, file):
             db.commit()
             os.remove(path)
             return
-        
+
         file.hash = hash
         filedata = get_file_data(path)
         file.size = filedata.size
         file.type = filedata.type.value
-        
+
         if filedata.type == FileType.IMAGE:
             db.add(models.Image(
                 id=file.id,
@@ -353,14 +261,15 @@ def file_calculate_params(db: Session, file):
         file.message = str(e)
         db.commit()
         os.remove(path)
-    
+
+# #############################################################################################
 
 def file_upload(
-        db: Session,
-        uploaded_file: UploadFile,
-        bg_tasks: BackgroundTasks,
-        user: User
-    ):
+    db: Session,
+    uploaded_file: UploadFile,
+    bg_tasks: BackgroundTasks,
+    user: User
+):
     parent_path = ROOT / "user" / user.username
     if not parent_path.exists():
         parent_path.mkdir(exist_ok=True)
@@ -385,6 +294,55 @@ def file_upload(
         db.rollback()
         os.remove(path)
         raise
+
+def file_get_by_id(db: Session, id: int, username: str | None = None) -> models.File | None:
+    db_file = db.query(models.File).filter(models.File.id == id)
+    if username:
+        db_file = db_file.filter(models.File.owner == username)
+    return db_file.first()
+
+
+def files_get_query(
+    db: Session,
+    username: str | None = None,
+
+    state: FileState = FileState.PUBLIC,
+
+    name: str | None = None,
+    type: FileType | None = None,
+
+    order_column: OrderColumns = OrderColumns.upload_time,
+    order_type: OrderType = OrderType.desc,
+
+    include: List[str] | None = None,
+    ban: List[str] | None = None,
+    strict: bool = True,
+
+    select_list: list = [models.File]
+) -> SqlQuery:
+    db_files = db.query(*select_list)
+
+    db_files = db.query(models.File).filter(models.File.state == state.value)
+
+    if username:
+        db_files = db_files.filter(models.File.owner == username)
+    if name:
+        db_files = db_files.filter(models.File.filename.ilike(f'%{name}%'))
+    if type:
+        db_files = db_files.filter(models.File.type == type.value)
+
+    # if include:
+    #     sub_include = db.query(models.FilesTags.file_hash).filter(models.FilesTags.tag_id.in_(include)).group_by(models.FilesTags.file_hash)
+    #     if strict:
+    #         sub_include = sub_include.having(func.count(models.FilesTags.tag_id) == len(include))
+    #     db_files = db_files.filter(models.File.hash.in_(sub_include))
+    # if ban:
+    #     sub_ban = db.query(models.FilesTags.file_hash).filter(models.FilesTags.tag_id.in_(ban)).group_by(models.FilesTags.file_hash)
+    #     db_files = db_files.filter(models.File.hash.notin_(sub_ban))
+    column = getattr(models.File, order_column.value)
+    order_rule = column.asc() if order_type == OrderType.asc else column.desc()
+    db_files = db_files.order_by(order_rule)
+    return db_files
 
 
 # def file_update(db: Session, hash: str, file_info: FilePut, username: str | None = None) -> None:
@@ -425,11 +383,11 @@ def file_delete(db: Session, id: int, username: str | None = None) -> None:
 
 @router.post("/", response_model=Response)
 def upload_file(
-        uploaded_file: UploadFile,
-        bg_tasks: BackgroundTasks,
-        user: User = Depends(get_user),
-        db: Session = Depends(get_db),
-    ):
+    uploaded_file: UploadFile,
+    bg_tasks: BackgroundTasks,
+    user: User = Depends(get_user),
+    db: Session = Depends(get_db),
+):
     file_upload(db, uploaded_file, bg_tasks, user)
     return response(None, "File uploaded")
 
@@ -448,7 +406,7 @@ def get_all_private_files(
         files_query = query_pages(files_query, page, size)
     files_list: List[models.File] = files_query.all()
     return response({
-        "items": {db_file.id:convert(db_file) for db_file in files_list},
+        "items": {db_file.id: convert(db_file) for db_file in files_list},
         "total": total
     })
 
