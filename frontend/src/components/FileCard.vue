@@ -26,11 +26,11 @@
                 {{ file.name }}
             </template>
             <template #header-extra>
-                <n-rate color="#4fb233">
+                <!-- <n-rate color="#4fb233">
                     <n-icon size="20">
                         <cash-icon />
                     </n-icon>
-                </n-rate>
+                </n-rate> -->
                 <n-button @click="handleLike" text size="small" type="error">
                     <template #icon>
                         <FavoriteRound v-if="file.like"/>
@@ -42,10 +42,11 @@
                 {{ file.description }}
             </template>
             <div v-if="!editMode" style="display: flex; align-items: flex-start; gap: 6px;">
-                <div  style="flex-grow: 100; display: flex; gap: 3px; flex-wrap: wrap;">
-                    <n-tag v-for="tag in fileTags" :key="tag" size="small">{{ tag }}</n-tag>
+                <div style="flex-grow: 100; display: flex; gap: 3px; flex-wrap: wrap;">
+                    <n-tag v-if="fileTags?.length" v-for="tag in fileTags" :key="tag" size="small">{{ tag }}</n-tag>
+                    <span v-else>No Tags</span>
                 </div>
-                <n-button @click="handleEditMode" size="tiny">
+                <n-button @click="handleEditMode" text size="small">
                     <template #icon>
                         <SettingsRound />
                     </template>

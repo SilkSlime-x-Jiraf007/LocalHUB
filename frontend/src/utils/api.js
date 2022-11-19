@@ -66,9 +66,31 @@ export const uploadFile = (file, onProgress) => {
     })
 }
 
-export const getPrivateFiles = () => {
-    return instance.get('/files/private')
+
+
+export const getProcessingFiles = (page, size) => {
+    return instance.get('/files/', {params: {
+        page: page,
+        size: size,
+        state: "processing"
+    }})
 }
+export const getErrorFiles = (page, size) => {
+    return instance.get('/files/', {params: {
+        page: page,
+        size: size,
+        state: "error"
+    }})
+}
+export const getPrivateFiles = (page, size) => {
+    return instance.get('/files/', {params: {
+        page: page,
+        size: size,
+        state: "private"
+    }})
+}
+
+
 
 export const deleteFile = (id) => {
     return instance.delete(`/files/${id}`)
